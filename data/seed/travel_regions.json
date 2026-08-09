@@ -1,0 +1,17 @@
+[
+  { "code": "greater_toronto", "name": "Greater Toronto Region", "kind": "origin" },
+  { "code": "japan", "name": "Japan", "kind": "destination" },
+  { "code": "south_korea", "name": "South Korea", "kind": "destination" },
+  { "code": "taiwan", "name": "Taiwan", "kind": "destination" },
+  { "code": "hong_kong", "name": "Hong Kong", "kind": "destination" },
+  { "code": "singapore", "name": "Singapore", "kind": "destination" },
+  { "code": "thailand", "name": "Thailand", "kind": "destination" },
+  { "code": "turkey", "name": "Turkey", "kind": "destination" },
+  { "code": "qatar", "name": "Qatar", "kind": "destination" },
+  { "code": "uae", "name": "United Arab Emirates", "kind": "destination" },
+  { "code": "united_kingdom", "name": "United Kingdom", "kind": "destination" },
+  { "code": "france", "name": "France", "kind": "destination" },
+  { "code": "netherlands", "name": "Netherlands", "kind": "destination" },
+  { "code": "germany", "name": "Germany", "kind": "destination" },
+  { "code": "portugal", "name": "Portugal", "kind": "destination" }
+]

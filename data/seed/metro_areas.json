@@ -1,0 +1,20 @@
+[
+  { "code": "toronto", "name": "Toronto", "country": "CA", "lat": 43.6532, "lon": -79.3832 },
+  { "code": "buffalo", "name": "Buffalo", "country": "US", "lat": 42.8864, "lon": -78.8784 },
+  { "code": "tokyo", "name": "Tokyo", "country": "JP", "lat": 35.6762, "lon": 139.6503 },
+  { "code": "kansai", "name": "Osaka / Kansai", "country": "JP", "lat": 34.6937, "lon": 135.5023 },
+  { "code": "seoul", "name": "Seoul", "country": "KR", "lat": 37.5665, "lon": 126.9780 },
+  { "code": "taipei", "name": "Taipei", "country": "TW", "lat": 25.0330, "lon": 121.5654 },
+  { "code": "hong_kong", "name": "Hong Kong", "country": "HK", "lat": 22.3193, "lon": 114.1694 },
+  { "code": "singapore", "name": "Singapore", "country": "SG", "lat": 1.3521, "lon": 103.8198 },
+  { "code": "bangkok", "name": "Bangkok", "country": "TH", "lat": 13.7563, "lon": 100.5018 },
+  { "code": "istanbul", "name": "Istanbul", "country": "TR", "lat": 41.0082, "lon": 28.9784 },
+  { "code": "doha", "name": "Doha", "country": "QA", "lat": 25.2854, "lon": 51.5310 },
+  { "code": "dubai", "name": "Dubai", "country": "AE", "lat": 25.2048, "lon": 55.2708 },
+  { "code": "london", "name": "London", "country": "GB", "lat": 51.5072, "lon": -0.1276 },
+  { "code": "paris", "name": "Paris", "country": "FR", "lat": 48.8566, "lon": 2.3522 },
+  { "code": "amsterdam", "name": "Amsterdam", "country": "NL", "lat": 52.3676, "lon": 4.9041 },
+  { "code": "frankfurt", "name": "Frankfurt", "country": "DE", "lat": 50.1109, "lon": 8.6821 },
+  { "code": "lisbon", "name": "Lisbon", "country": "PT", "lat": 38.7223, "lon": -9.1393 },
+  { "code": "porto", "name": "Porto", "country": "PT", "lat": 41.1579, "lon": -8.6291 }
+]

@@ -1,0 +1,37 @@
+# --- Python / backend ---
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+backend/dev.db
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/.coverage
+
+# --- Node / frontend ---
+node_modules/
+.next/
+out/
+frontend/.env.local
+npm-debug.log*
+
+# --- Env / secrets ---
+.env
+.env.*.local
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Ad hoc dev-server logs / pid files from manual `Start-Process` runs ---
+*.pid
+uvicorn_*.log
+next_*.log
+
+# --- Asset processing intermediates ---
+scripts/.assets-venv/
