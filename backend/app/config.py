@@ -33,13 +33,45 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     default_currency: str = "CAD"
 
-    # --- Fare provider ---
-    fare_provider: Literal["auto", "mock", "serpapi"] = "auto"
-    serpapi_api_key: str = ""
+    # --- Accounts ---
+    # No fallback: every search runs on the requesting user's OWN stored
+    # SerpApi key, not a server-wide one (see providers/duffel.py's sibling
+    # module for why per-user keys exist at all -- this is that design,
+    # made mandatory). New accounts land in status="pending" and can't log
+    # in until an admin approves them (app/cli.py's `make-admin` bootstraps
+    # the first admin). Passwords are argon2-hashed, never stored
+    # recoverable. API keys ARE stored recoverable (Fernet, symmetric) --
+    # unlike a password, the app must be able to use this value on the
+    # user's behalf for every search, so one-way hashing doesn't apply;
+    # encryption at rest is the right control here instead.
+    #
+    # api_key_encryption_key MUST be a real Fernet key (44 url-safe base64
+    # chars) -- generate one with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # No auto-generated fallback on purpose: this restarts often in dev
+    # (uvicorn --reload, manual restarts), and a fresh key every restart
+    # would silently make every already-stored API key undecryptable.
+    # Startup fails loudly instead if this is missing -- see factory.py.
+    api_key_encryption_key: str = ""
+    session_ttl_seconds: int = 60 * 60 * 24 * 30  # 30 days, matches the reference app's session lifetime
 
-    # --- Budget guard (live SerpApi calls only; mock provider is free) ---
+    # --- Fare provider ---
+    fare_provider: Literal["auto", "mock", "serpapi", "duffel"] = "auto"
+    serpapi_api_key: str = ""
+    duffel_api_key: str = ""
+
+    # --- Budget guard (live provider calls only; mock provider is free).
+    # Each paid provider has its own pool since only one is ever active at
+    # a time (effective_fare_provider) but their per-call cost differs a
+    # lot: SerpApi ~$0.01-0.025/search flat, Duffel ~$0.005/search once its
+    # own search-to-book ratio is exceeded (this app has no booking flow,
+    # so treat every Duffel call as billed at that rate). Both sets of
+    # defaults target a similar ~$25-40/month ceiling for a hobby-scale
+    # deployment, not a specific search count. ---
     serpapi_daily_budget: int = 150
     serpapi_monthly_budget: int = 1500
+    duffel_daily_budget: int = 200
+    duffel_monthly_budget: int = 5000
     per_search_live_cap: int = 20
     live_discovery_calls_per_search: int = 6
     # verify_top pairs every origin variant of a trip together (see
@@ -67,9 +99,17 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
-    def effective_fare_provider(self) -> Literal["mock", "serpapi"]:
+    def effective_fare_provider(self) -> Literal["mock", "serpapi", "duffel"]:
         if self.fare_provider == "auto":
-            return "serpapi" if self.serpapi_api_key else "mock"
+            # Prefer Duffel when both keys happen to be configured: cheaper
+            # per-call, and full (not just outbound-indicative) round-trip
+            # detail. SerpApi remains a fully supported explicit choice
+            # (FARE_PROVIDER=serpapi) either way.
+            if self.duffel_api_key:
+                return "duffel"
+            if self.serpapi_api_key:
+                return "serpapi"
+            return "mock"
         return self.fare_provider
 
 

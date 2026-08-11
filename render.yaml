@@ -1,0 +1,69 @@
+databases:
+  - name: smartflighter-db
+    plan: free
+    postgresMajorVersion: 16
+
+services:
+  - name: smartflighter-backend
+    type: web
+    runtime: python
+    plan: free
+    # preDeployCommand needs a paid plan, so migrations + seed run here
+    # instead -- both are idempotent, safe to re-run on every deploy.
+    buildCommand: pip install -e backend/. && cd backend && python -m alembic upgrade head && python -m app.cli seed
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smartflighter-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: smartflighter-redis
+          type: keyvalue
+          property: connectionString
+      - key: CORS_ORIGINS
+        sync: false # set to your deployed frontend URL, e.g. https://smartflighter.vercel.app
+      - key: DEFAULT_CURRENCY
+        value: CAD
+      - key: API_KEY_ENCRYPTION_KEY
+        sync: false # REQUIRED -- generate with the command in .env.example; startup fails without it.
+                     # Use a FRESH key, never the one from your local .env -- see README "Accounts".
+      - key: SESSION_TTL_SECONDS
+        value: "2592000"
+      - key: FARE_PROVIDER
+        value: auto
+      - key: SERPAPI_API_KEY
+        sync: false # paste your real key in the Render dashboard -- never committed to the repo
+      - key: DUFFEL_API_KEY
+        sync: false
+      - key: SERPAPI_DAILY_BUDGET
+        value: "150"
+      - key: SERPAPI_MONTHLY_BUDGET
+        value: "1500"
+      - key: DUFFEL_DAILY_BUDGET
+        value: "200"
+      - key: DUFFEL_MONTHLY_BUDGET
+        value: "5000"
+      - key: PER_SEARCH_LIVE_CAP
+        value: "20"
+      - key: LIVE_DISCOVERY_CALLS_PER_SEARCH
+        value: "6"
+      - key: VERIFY_TOP_N
+        value: "16"
+      - key: FARE_CACHE_TTL_DISCOVERY
+        value: "21600"
+      - key: FARE_CACHE_TTL_VERIFIED
+        value: "1800"
+      - key: FARE_CACHE_TTL_EMPTY
+        value: "3600"
+
+  - name: smartflighter-redis
+    type: keyvalue
+    plan: free
+    # ipAllowList intentionally omitted: only the web service (same private
+    # network) needs to reach this. Confirm in the Render dashboard after
+    # first deploy that it shows no public access -- didn't want to guess
+    # at the exact semantics of an empty list for a database-adjacent
+    # service and risk getting it backwards.

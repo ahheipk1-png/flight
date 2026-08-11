@@ -134,3 +134,30 @@ export interface SearchStateResponse {
   meta?: { candidate_count: number; candidate_group_count: number; coarse_count: number };
   error?: string;
 }
+
+// Mirrors backend/app/schemas/auth.py exactly.
+
+export type AccountStatus = "pending" | "approved" | "denied" | "disabled";
+
+export interface SessionOut {
+  token: string;
+  username: string;
+  is_admin: boolean;
+}
+
+export interface MeOut {
+  username: string;
+  status: AccountStatus;
+  is_admin: boolean;
+  has_api_key: boolean;
+}
+
+export interface AdminAccountOut {
+  id: number;
+  username: string;
+  status: AccountStatus;
+  is_admin: boolean;
+  has_api_key: boolean;
+  created_at: string;
+  decided_at: string | null;
+}

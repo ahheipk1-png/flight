@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db import session_scope
-from app.providers.base import FareOption, FareQuery
+from app.providers.base import FareOption, FareProvider, FareQuery
 from app.search.pruning import Candidate, CandidateGroup
 from app.search.spaces import SearchSpace
 from app.services import fares as fare_service
@@ -79,11 +79,22 @@ def _select_candidates_to_verify(groups: list[CandidateGroup], call_budget: int)
 
 
 async def verify_top(
-    session: AsyncSession, space: SearchSpace, groups: list[CandidateGroup], settings: Settings
+    session: AsyncSession,
+    space: SearchSpace,
+    groups: list[CandidateGroup],
+    settings: Settings,
+    *,
+    provider: FareProvider | None = None,
 ) -> tuple[list[VerifiedItinerary], bool]:
     """Returns (verified_itineraries, degraded). degraded=True if any
     candidate had to fall back to an indicative estimate because the
     live budget was exhausted mid-search.
+
+    `provider` is the caller's own per-user FareProvider (api/deps.py) --
+    passed through untouched to fare_service.search_cached, which is what
+    actually skips the site-wide budget guard for it. None only for
+    site-wide-default callers (currently none in the real request path;
+    kept for tests / any future site-wide fallback).
 
     The `session` parameter is intentionally unused by the concurrent path
     below -- an AsyncSession is not safe to share across coroutines running
@@ -110,7 +121,9 @@ async def verify_top(
             max_stops=space.max_stops,
         )
         async with semaphore, session_scope() as local_session:
-            options, degraded = await fare_service.search_cached(local_session, query, kind="verified")
+            options, degraded = await fare_service.search_cached(
+                local_session, query, kind="verified", provider=provider
+            )
 
             if degraded:
                 any_degraded = True

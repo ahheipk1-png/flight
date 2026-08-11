@@ -14,6 +14,7 @@ import uuid
 
 from app.config import Settings, get_settings
 from app.db import session_scope
+from app.providers.base import FareProvider
 from app.redis import RedisLike, get_redis
 from app.schemas.search import SearchRequest
 from app.search.pipeline import run_search
@@ -52,7 +53,7 @@ async def get_state(search_id: str, redis: RedisLike | None = None) -> dict | No
     return json.loads(payload)
 
 
-async def _run_job(search_id: str, req: SearchRequest, settings: Settings) -> None:
+async def _run_job(search_id: str, req: SearchRequest, settings: Settings, provider: FareProvider) -> None:
     redis = get_redis()
 
     async def on_stage(stage_name: str) -> None:
@@ -60,7 +61,7 @@ async def _run_job(search_id: str, req: SearchRequest, settings: Settings) -> No
 
     try:
         async with session_scope() as session:
-            result = await run_search(session, req, settings, on_stage=on_stage)
+            result = await run_search(session, req, settings, on_stage=on_stage, provider=provider)
 
         await _set_state(
             redis,
@@ -79,10 +80,14 @@ async def _run_job(search_id: str, req: SearchRequest, settings: Settings) -> No
         await _set_state(redis, search_id, status="error", stage="error", error=str(exc))
 
 
-async def start_search(req: SearchRequest, settings: Settings | None = None) -> str:
+async def start_search(req: SearchRequest, provider: FareProvider, settings: Settings | None = None) -> str:
+    """`provider` is required, not optional: every real search runs on the
+    calling user's own FareProvider (built from their stored key by
+    api/deps.py), never a site-wide default -- there is no fallback.
+    """
     settings = settings or get_settings()
     search_id = uuid.uuid4().hex[:12]
     redis = get_redis()
     await _set_state(redis, search_id, status="running", stage="queued", degraded=False, itineraries=None)
-    _spawn(_run_job(search_id, req, settings))
+    _spawn(_run_job(search_id, req, settings, provider))
     return search_id

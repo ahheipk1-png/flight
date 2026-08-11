@@ -1,19 +1,29 @@
-"""End-to-end mock-mode smoke test: POST the spec §31-shaped example body,
-poll until done, and assert every hard constraint plus the plan's
-verification checklist (explanations present, verified observations
-written, nearby-airport savings respected).
+"""End-to-end mock-mode smoke test: run the spec §31-shaped example body
+through the real pipeline (run_search) with an explicit mock provider, and
+assert every hard constraint plus the plan's verification checklist
+(explanations present, verified observations written, nearby-airport
+savings respected).
+
+Calls run_search()/start_search() directly with an explicit provider
+rather than going through POST /api/search over HTTP -- that endpoint now
+requires a logged-in, approved user with their own stored key (see
+tests/unit/test_auth_gating.py for coverage of that HTTP-level gate); this
+test's job is to prove the search PIPELINE itself is correct, which needs
+no auth to exercise.
 """
 
 from __future__ import annotations
 
 import asyncio
 
-import httpx
 import pytest
 from sqlalchemy import select
 
-from app.main import app
+from app.config import get_settings
 from app.models.fares import FareObservation
+from app.providers.mock import mock_provider
+from app.schemas.search import SearchRequest
+from app.search.jobs import get_state, start_search
 
 SEARCH_BODY = {
     "origin": {"region": "greater_toronto", "max_ground_minutes": 120, "min_saving_per_person": 100},
@@ -30,24 +40,14 @@ SEARCH_BODY = {
 }
 
 
-@pytest.fixture
-async def client(seeded_session):
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
-
-
-async def test_search_end_to_end_mock_mode(client, seeded_session):
-    resp = await client.post("/api/search", json=SEARCH_BODY)
-    assert resp.status_code == 200
-    search_id = resp.json()["search_id"]
+async def test_search_end_to_end_mock_mode(seeded_session):
+    req = SearchRequest.model_validate(SEARCH_BODY)
+    search_id = await start_search(req, mock_provider, get_settings())
 
     state = None
     for _ in range(500):
-        resp = await client.get(f"/api/search/{search_id}")
-        assert resp.status_code == 200
-        state = resp.json()
-        if state["status"] in ("done", "error"):
+        state = await get_state(search_id)
+        if state and state["status"] in ("done", "error"):
             break
         await asyncio.sleep(0.02)
 

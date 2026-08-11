@@ -42,7 +42,7 @@ export function useSearch() {
   useEffect(() => stopPolling, [stopPolling]);
 
   const runSearch = useCallback(
-    async (body: SearchRequestBody) => {
+    async (body: SearchRequestBody, token: string) => {
       stopPolling();
       setError(null);
       setResult(null);
@@ -50,12 +50,12 @@ export function useSearch() {
       setUiState("searching");
 
       try {
-        const { search_id } = await postSearch(body);
+        const { search_id } = await postSearch(body, token);
         const poll = async () => {
           const controller = new AbortController();
           pollAbortRef.current = controller;
           try {
-            const state = await getSearchState(search_id, controller.signal);
+            const state = await getSearchState(search_id, token, controller.signal);
             setStage(state.stage);
 
             if (state.status === "done") {

@@ -138,9 +138,19 @@ async def search_cached(
     was exhausted and nothing was fetched -- callers (search/verification.py)
     should fall back to services.indicative.estimate() and flag the result
     as unverified rather than surfacing an error.
+
+    An explicitly-passed `provider` (the normal path now -- every real
+    /api/search call passes the caller's own per-user provider, built from
+    their stored key; see api/deps.py) skips the site-wide BudgetGuard
+    entirely: that guard exists to protect the SITE OWNER's spend on the
+    site's own default provider, and doesn't apply to a user spending
+    their own key/quota. It still applies when no provider is passed (the
+    CLI `probe` command and any other site-wide-default caller), and the
+    call is still cache-checked and audit-logged either way.
     """
     settings = settings or get_settings()
     redis = redis or get_redis()
+    explicit_provider = provider is not None
     provider = provider or get_fare_provider(settings)
 
     key = _cache_key(provider.name, query)
@@ -151,12 +161,13 @@ async def search_cached(
             payload = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
             return _deserialize(payload), False
 
-    if provider.name == "serpapi":
-        guard = BudgetGuard(redis, settings)
-        try:
-            await guard.try_reserve()
-        except BudgetExhausted:
-            return [], True
+    if provider.name != "mock":
+        if not explicit_provider:
+            guard = BudgetGuard.for_provider(provider.name, redis, settings)
+            try:
+                await guard.try_reserve()
+            except BudgetExhausted:
+                return [], True
         await _log_api_call(session, provider.name, key)
 
     options = await provider.search_round_trip(query)
@@ -175,4 +186,4 @@ async def search_cached(
 async def budget_status(settings: Settings | None = None, redis: RedisLike | None = None) -> dict:
     settings = settings or get_settings()
     redis = redis or get_redis()
-    return await BudgetGuard(redis, settings).status()
+    return await BudgetGuard.for_provider(settings.effective_fare_provider, redis, settings).status()

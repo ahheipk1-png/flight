@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.api.deps import get_search_provider
+from app.providers.base import FareProvider
 from app.schemas.search import SearchRequest
 from app.search.jobs import get_state, start_search
 
@@ -9,8 +11,8 @@ router = APIRouter(prefix="/api", tags=["search"])
 
 
 @router.post("/search")
-async def post_search(req: SearchRequest) -> dict:
-    search_id = await start_search(req)
+async def post_search(req: SearchRequest, provider: FareProvider = Depends(get_search_provider)) -> dict:
+    search_id = await start_search(req, provider)
     return {"search_id": search_id}
 
 

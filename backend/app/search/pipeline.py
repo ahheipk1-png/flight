@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.models.geo import Airport
+from app.providers.base import FareProvider
 from app.schemas.itinerary import AirportRef, GroundTransferOut, ItineraryOut, LegOut
 from app.schemas.search import SearchRequest
 from app.search.candidates import generate_coarse
@@ -38,6 +39,7 @@ async def run_search(
     settings: Settings | None = None,
     *,
     on_stage: StageCallback | None = None,
+    provider: FareProvider | None = None,
 ) -> dict:
     settings = settings or get_settings()
 
@@ -53,7 +55,7 @@ async def run_search(
     candidate_groups = await prune_and_expand(session, space, coarse, settings)
 
     await stage("verifying")
-    verified, degraded = await verify_top(session, space, candidate_groups, settings)
+    verified, degraded = await verify_top(session, space, candidate_groups, settings, provider=provider)
 
     await stage("ranking")
     ranked = await rank(session, space, verified, settings)

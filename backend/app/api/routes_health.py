@@ -34,5 +34,5 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict:
         "db": "ok" if db_ok else "error",
         "redis": "ok" if redis_ok else "error",
         "fare_provider": provider,
-        "budget": await budget_status(settings) if provider == "serpapi" else None,
+        "budget": await budget_status(settings) if provider != "mock" else None,
     }

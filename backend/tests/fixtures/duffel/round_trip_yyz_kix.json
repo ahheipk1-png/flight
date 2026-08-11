@@ -1,0 +1,117 @@
+{
+  "data": {
+    "id": "orq_0000AbCdEfGhIjKlMnOpQr",
+    "offers": [
+      {
+        "id": "off_0000AbCdEfGhIjKlMnOp01",
+        "total_amount": "1150.00",
+        "total_currency": "CAD",
+        "slices": [
+          {
+            "id": "sli_out_01",
+            "duration": "PT18H05M",
+            "segments": [
+              {
+                "id": "seg_out_01a",
+                "origin": { "iata_code": "YYZ", "name": "Toronto Pearson International" },
+                "destination": { "iata_code": "ICN", "name": "Incheon International" },
+                "departing_at": "2026-09-18T13:00:00",
+                "arriving_at": "2026-09-19T15:35:00",
+                "duration": "PT13H35M",
+                "marketing_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "operating_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "marketing_carrier_flight_number": "071",
+                "operating_carrier_flight_number": "071"
+              },
+              {
+                "id": "seg_out_01b",
+                "origin": { "iata_code": "ICN", "name": "Incheon International" },
+                "destination": { "iata_code": "KIX", "name": "Kansai International" },
+                "departing_at": "2026-09-19T17:25:00",
+                "arriving_at": "2026-09-19T19:45:00",
+                "duration": "PT2H20M",
+                "marketing_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "operating_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "marketing_carrier_flight_number": "723",
+                "operating_carrier_flight_number": "723"
+              }
+            ]
+          },
+          {
+            "id": "sli_ret_01",
+            "duration": "PT16H40M",
+            "segments": [
+              {
+                "id": "seg_ret_01a",
+                "origin": { "iata_code": "KIX", "name": "Kansai International" },
+                "destination": { "iata_code": "ICN", "name": "Incheon International" },
+                "departing_at": "2026-10-02T09:10:00",
+                "arriving_at": "2026-10-02T10:55:00",
+                "duration": "PT1H45M",
+                "marketing_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "operating_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "marketing_carrier_flight_number": "724",
+                "operating_carrier_flight_number": "724"
+              },
+              {
+                "id": "seg_ret_01b",
+                "origin": { "iata_code": "ICN", "name": "Incheon International" },
+                "destination": { "iata_code": "YYZ", "name": "Toronto Pearson International" },
+                "departing_at": "2026-10-02T13:20:00",
+                "arriving_at": "2026-10-02T15:50:00",
+                "duration": "PT13H30M",
+                "marketing_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "operating_carrier": { "iata_code": "KE", "name": "Korean Air" },
+                "marketing_carrier_flight_number": "072",
+                "operating_carrier_flight_number": "072"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "off_0000AbCdEfGhIjKlMnOp02",
+        "total_amount": "1389.00",
+        "total_currency": "CAD",
+        "slices": [
+          {
+            "id": "sli_out_02",
+            "duration": "PT13H00M",
+            "segments": [
+              {
+                "id": "seg_out_02a",
+                "origin": { "iata_code": "YYZ", "name": "Toronto Pearson International" },
+                "destination": { "iata_code": "KIX", "name": "Kansai International" },
+                "departing_at": "2026-09-18T23:30:00",
+                "arriving_at": "2026-09-19T12:30:00",
+                "duration": "PT13H00M",
+                "marketing_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "operating_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "marketing_carrier_flight_number": "196",
+                "operating_carrier_flight_number": "196"
+              }
+            ]
+          },
+          {
+            "id": "sli_ret_02",
+            "duration": "PT12H45M",
+            "segments": [
+              {
+                "id": "seg_ret_02a",
+                "origin": { "iata_code": "KIX", "name": "Kansai International" },
+                "destination": { "iata_code": "YYZ", "name": "Toronto Pearson International" },
+                "departing_at": "2026-10-02T18:00:00",
+                "arriving_at": "2026-10-02T21:45:00",
+                "duration": "PT12H45M",
+                "marketing_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "operating_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "marketing_carrier_flight_number": "197",
+                "operating_carrier_flight_number": "197"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
