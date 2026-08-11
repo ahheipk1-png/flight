@@ -48,7 +48,9 @@ async def generate_coarse(session: AsyncSession, space: SearchSpace, settings: S
     for dest in space.destination_primaries:
         for depart in dates:
             return_date = depart + dt.timedelta(days=midpoint_length)
-            price, source = await estimate(session, space.primary_origin.iata, dest.iata, depart, return_date)
+            price, source = await estimate(
+                session, space.primary_origin.iata, dest.iata, depart, return_date, trip_type=space.trip_type
+            )
             cells.append(
                 Cell(
                     origin=space.primary_origin.iata,

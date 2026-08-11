@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import * as api from "@/lib/api";
-import type { AdminAccountOut } from "@/lib/types";
+import { useLocale } from "@/lib/i18n/LocaleContext";
+import type { MessageKey } from "@/lib/i18n/messages";
+import type { AccountStatus, AdminAccountOut } from "@/lib/types";
 
 interface AdminPageProps {
   token: string;
@@ -10,7 +12,21 @@ interface AdminPageProps {
   onBack: () => void;
 }
 
+// toLocaleString() defaults to the browser's OS locale, which can differ
+// from whichever language the admin has picked in-app via the switcher --
+// this maps our locale to a real Intl tag so the date matches what's
+// actually on screen.
+const INTL_TAG: Record<string, string> = { "zh-Hant": "zh-TW", "zh-Hans": "zh-CN", en: "en-CA" };
+
+const STATUS_KEY: Record<AccountStatus, MessageKey> = {
+  pending: "status.pending",
+  approved: "status.approved",
+  denied: "status.denied",
+  disabled: "status.disabled",
+};
+
 export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
+  const { t, locale } = useLocale();
   const [accounts, setAccounts] = useState<AdminAccountOut[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -20,9 +36,9 @@ export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
       const list = await api.listAccounts(token);
       setAccounts(list);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load accounts.");
+      setError(err instanceof Error ? err.message : t("admin.loadError"));
     }
-  }, [token]);
+  }, [token, t]);
 
   // Inlined rather than calling load() directly, so this effect has no
   // synchronous setState call in its own body -- only inside .then/.catch,
@@ -36,12 +52,16 @@ export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
         if (!cancelled) setAccounts(list);
       },
       (err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load accounts.");
+        if (!cancelled) setError(err instanceof Error ? err.message : t("admin.loadError"));
       },
     );
     return () => {
       cancelled = true;
     };
+    // t() is stable across a given locale's lifetime in practice, but isn't
+    // memoized identity-stable -- omitted from deps on purpose so switching
+    // languages mid-load doesn't re-trigger a duplicate fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function act(userId: number, action: "approve" | "deny" | "disable") {
@@ -53,25 +73,25 @@ export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
       else await api.disableAccount(token, userId);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed.");
+      setError(err instanceof Error ? err.message : t("admin.actionFailed"));
     } finally {
       setBusyId(null);
     }
   }
 
   async function setPassword(userId: number, username: string) {
-    const pw = window.prompt(`New password for ${username} (8+ characters):`);
+    const pw = window.prompt(t("admin.setPasswordPrompt", { username }));
     if (pw == null) return;
     if (pw.length < 8) {
-      window.alert("Password must be at least 8 characters.");
+      window.alert(t("admin.passwordTooShort"));
       return;
     }
     setBusyId(userId);
     try {
       await api.adminSetPassword(token, userId, pw);
-      window.alert(`Password updated for ${username}.`);
+      window.alert(t("admin.passwordUpdated", { username }));
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed.");
+      window.alert(err instanceof Error ? err.message : t("admin.setPasswordFailed"));
     } finally {
       setBusyId(null);
     }
@@ -83,37 +103,38 @@ export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900">Admin — account requests</h1>
+        <h1 className="text-xl font-bold text-slate-900">{t("admin.title")}</h1>
         <button type="button" onClick={onBack} className="text-sm font-medium text-sky-600 hover:text-sky-700">
-          ← Back to search
+          {t("admin.back")}
         </button>
       </div>
 
       {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-      {accounts === null && !error && <p className="text-sm text-slate-400">Loading…</p>}
+      {accounts === null && !error && <p className="text-sm text-slate-400">{t("admin.loading")}</p>}
 
       {accounts !== null && (
         <>
           <section className="mb-8">
             <h2 className="mb-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">
-              Waiting for approval ({pending.length})
+              {t("admin.waitingHeading", { count: pending.length })}
             </h2>
-            {pending.length === 0 && <p className="text-sm text-slate-400">No accounts waiting.</p>}
+            {pending.length === 0 && <p className="text-sm text-slate-400">{t("admin.noneWaiting")}</p>}
             <div className="space-y-2">
               {pending.map((a) => (
                 <div key={a.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{a.username}</p>
                     <p className="text-xs text-slate-400">
-                      requested {new Date(a.created_at).toLocaleString()} · {a.has_api_key ? "provided a key" : "no key yet"}
+                      {t("admin.requestedAt", { date: new Date(a.created_at).toLocaleString(INTL_TAG[locale]) })} ·{" "}
+                      {a.has_api_key ? t("admin.providedKey") : t("admin.noKeyYet")}
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <ActionButton onClick={() => act(a.id, "approve")} disabled={busyId === a.id} variant="primary">
-                      Approve
+                      {t("admin.approve")}
                     </ActionButton>
                     <ActionButton onClick={() => act(a.id, "deny")} disabled={busyId === a.id} variant="ghost">
-                      Deny
+                      {t("admin.deny")}
                     </ActionButton>
                   </div>
                 </div>
@@ -122,7 +143,9 @@ export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
           </section>
 
           <section>
-            <h2 className="mb-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">All accounts ({others.length})</h2>
+            <h2 className="mb-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+              {t("admin.allAccountsHeading", { count: others.length })}
+            </h2>
             <div className="space-y-2">
               {others.map((a) => (
                 <div key={a.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
@@ -130,20 +153,20 @@ export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
                     <p className="text-sm font-medium text-slate-800">
                       {a.username} <StatusBadge status={a.status} isAdmin={a.is_admin} />
                     </p>
-                    <p className="text-xs text-slate-400">{a.has_api_key ? "has a key" : "no key"}</p>
+                    <p className="text-xs text-slate-400">{a.has_api_key ? t("admin.hasKey") : t("admin.noKey")}</p>
                   </div>
                   <div className="flex gap-2">
                     <ActionButton onClick={() => setPassword(a.id, a.username)} disabled={busyId === a.id} variant="ghost">
-                      Set password
+                      {t("admin.setPassword")}
                     </ActionButton>
                     {a.status === "approved" && !a.is_admin && a.username !== currentUsername && (
                       <ActionButton onClick={() => act(a.id, "disable")} disabled={busyId === a.id} variant="ghost">
-                        Disable
+                        {t("admin.disable")}
                       </ActionButton>
                     )}
                     {a.status !== "approved" && (
                       <ActionButton onClick={() => act(a.id, "approve")} disabled={busyId === a.id} variant="primary">
-                        Approve
+                        {t("admin.approve")}
                       </ActionButton>
                     )}
                   </div>
@@ -157,11 +180,12 @@ export function AdminPage({ token, currentUsername, onBack }: AdminPageProps) {
   );
 }
 
-function StatusBadge({ status, isAdmin }: { status: string; isAdmin: boolean }) {
+function StatusBadge({ status, isAdmin }: { status: AccountStatus; isAdmin: boolean }) {
+  const { t } = useLocale();
   return (
     <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
-      {status}
-      {isAdmin ? " · admin" : ""}
+      {t(STATUS_KEY[status])}
+      {isAdmin ? t("admin.adminSuffix") : ""}
     </span>
   );
 }

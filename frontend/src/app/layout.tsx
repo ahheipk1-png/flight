@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Nunito } from "next/font/google";
+import { LocaleProvider } from "@/lib/i18n/LocaleContext";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -22,8 +23,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${nunito.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-slate-50 font-sans text-slate-900">{children}</body>
+    <html lang="zh-Hant" className={`${nunito.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col bg-slate-50 font-sans text-slate-900">
+        <LocaleProvider>{children}</LocaleProvider>
+      </body>
     </html>
   );
 }

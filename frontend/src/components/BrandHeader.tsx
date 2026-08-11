@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export function BrandHeader({ right }: { right?: React.ReactNode }) {
   return (
@@ -8,7 +9,10 @@ export function BrandHeader({ right }: { right?: React.ReactNode }) {
           <Image src="/brand/logo-mark.png" alt="" width={28} height={28} preload />
           <span className="text-xl font-bold tracking-tight text-brand-navy">SmartFlighter</span>
         </div>
-        {right}
+        <div className="flex items-center gap-4">
+          {right}
+          <LanguageSwitcher />
+        </div>
       </div>
     </header>
   );

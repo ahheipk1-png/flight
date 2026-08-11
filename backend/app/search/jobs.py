@@ -16,8 +16,8 @@ from app.config import Settings, get_settings
 from app.db import session_scope
 from app.providers.base import FareProvider
 from app.redis import RedisLike, get_redis
-from app.schemas.search import SearchRequest
-from app.search.pipeline import run_search
+from app.schemas.search import MultiCitySearchRequest, SearchRequest
+from app.search.pipeline import run_multi_city_search, run_search
 
 JOB_TTL_SECONDS = 3600
 
@@ -90,4 +90,49 @@ async def start_search(req: SearchRequest, provider: FareProvider, settings: Set
     redis = get_redis()
     await _set_state(redis, search_id, status="running", stage="queued", degraded=False, itineraries=None)
     _spawn(_run_job(search_id, req, settings, provider))
+    return search_id
+
+
+async def _run_multi_city_job(
+    search_id: str, req: MultiCitySearchRequest, settings: Settings, provider: FareProvider
+) -> None:
+    redis = get_redis()
+
+    async def on_stage(stage_name: str) -> None:
+        await _set_state(redis, search_id, status="running", stage=stage_name)
+
+    try:
+        async with session_scope() as session:
+            result = await run_multi_city_search(session, req, settings, on_stage=on_stage, provider=provider)
+
+        await _set_state(
+            redis,
+            search_id,
+            status="done",
+            stage="done",
+            degraded=result["degraded"],
+            itineraries=[it.model_dump(mode="json") for it in result["itineraries"]],
+            meta={
+                "candidate_count": result["candidate_count"],
+                "candidate_group_count": result["candidate_group_count"],
+                "coarse_count": result["coarse_count"],
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 -- surfaced to the client via job state, not raised
+        await _set_state(redis, search_id, status="error", stage="error", error=str(exc))
+
+
+async def start_multi_city_search(
+    req: MultiCitySearchRequest, provider: FareProvider, settings: Settings | None = None
+) -> str:
+    """Manual multi-city's counterpart to start_search -- same job-state
+    machinery (queued -> verifying -> ranking -> done, reusing the
+    existing SearchStage vocabulary; run_multi_city_search never emits
+    "generating"/"pruning" since it has no coarse grid to build).
+    """
+    settings = settings or get_settings()
+    search_id = uuid.uuid4().hex[:12]
+    redis = get_redis()
+    await _set_state(redis, search_id, status="running", stage="queued", degraded=False, itineraries=None)
+    _spawn(_run_multi_city_job(search_id, req, settings, provider))
     return search_id

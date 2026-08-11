@@ -1,44 +1,100 @@
-import { formatDuration, formatMoney, formatTime } from "@/lib/format";
-import type { ItineraryOut } from "@/lib/types";
+"use client";
 
-export function ItineraryDetails({ itinerary }: { itinerary: ItineraryOut }) {
+import { formatDuration, formatMoney, formatTime } from "@/lib/format";
+import { useLocale } from "@/lib/i18n/LocaleContext";
+import { localizedCityName } from "@/lib/i18n/placeNames";
+import type { AirportRef, ItineraryOut, LegOut, TripType } from "@/lib/types";
+
+// Reconstructs where each deliberate multi-city stop falls in the flat
+// legs[] list -- ItineraryOut has no per-slice boundary marker of its own,
+// only the ordered city_stops list, so this walks legs until each stop's
+// airport is reached as a LEG ARRIVAL (matching the backend's own slice
+// construction order). Same best-effort-reconstruction approach as
+// serpapi_google_flights.py's _partition_into_slices; a display-only
+// heuristic, not something search correctness depends on.
+function interleaveStops(legs: LegOut[], cityStops: AirportRef[] | null): (LegOut | AirportRef)[] {
+  if (!cityStops || cityStops.length === 0) return legs;
+  const items: (LegOut | AirportRef)[] = [];
+  let stopIdx = 0;
+  for (const leg of legs) {
+    items.push(leg);
+    if (stopIdx < cityStops.length && leg.to_iata === cityStops[stopIdx].iata) {
+      items.push(cityStops[stopIdx]);
+      stopIdx += 1;
+    }
+  }
+  return items;
+}
+
+function isCityStop(item: LegOut | AirportRef): item is AirportRef {
+  return "iata" in item;
+}
+
+export function ItineraryDetails({ itinerary, tripType }: { itinerary: ItineraryOut; tripType: TripType }) {
+  const { t, locale } = useLocale();
+  const isMultiCity = tripType === "multi_city";
+  const chain = isMultiCity ? [itinerary.origin, ...(itinerary.city_stops ?? []), itinerary.destination] : [itinerary.origin, itinerary.destination];
+  const rows = isMultiCity ? interleaveStops(itinerary.legs, itinerary.city_stops) : itinerary.legs;
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-lg font-semibold text-slate-900">
-          {itinerary.origin.city} ({itinerary.origin.iata}) → {itinerary.destination.city} ({itinerary.destination.iata})
+          {chain.map((a, idx) => (
+            <span key={`${a.iata}-${idx}`}>
+              {idx > 0 && " → "}
+              {localizedCityName(a.iata, a.city, locale)} ({a.iata})
+            </span>
+          ))}
         </h3>
         <p className="text-xl font-bold text-slate-900">{formatMoney(itinerary.fare, itinerary.currency)}</p>
       </div>
 
       <div className="mt-4 space-y-3">
-        {itinerary.legs.map((leg, idx) => (
-          <div key={`${leg.flight_number}-${idx}`} className="flex items-center gap-4 text-sm">
-            <span className="w-14 shrink-0 font-mono text-slate-500">{leg.carrier}{leg.flight_number.replace(leg.carrier, "")}</span>
-            <span className="flex-1 text-slate-700">
-              {leg.from_iata} {formatTime(leg.dep_time)} → {leg.to_iata} {formatTime(leg.arr_time)}
-            </span>
-            <span className="text-slate-400">{formatDuration(leg.duration_min)}</span>
-          </div>
-        ))}
-        {itinerary.legs.length === 0 && <p className="text-sm text-slate-400">Detailed timing not yet verified.</p>}
+        {rows.map((item, idx) =>
+          isCityStop(item) ? (
+            <div key={`stop-${item.iata}-${idx}`} className="flex items-center gap-2 pl-1 text-sm font-medium text-violet-700">
+              <span className="inline-block h-2.5 w-2.5 rotate-45 bg-violet-500" />
+              {t("results.stopIn", { city: localizedCityName(item.iata, item.city, locale) })}
+            </div>
+          ) : (
+            <div key={`${item.flight_number}-${idx}`} className="flex items-center gap-4 text-sm">
+              <span className="w-14 shrink-0 font-mono text-slate-500">
+                {item.carrier}
+                {item.flight_number.replace(item.carrier, "")}
+              </span>
+              <span className="flex-1 text-slate-700">
+                {item.from_iata} {formatTime(item.dep_time)} → {item.to_iata} {formatTime(item.arr_time)}
+              </span>
+              <span className="text-slate-400">{formatDuration(item.duration_min)}</span>
+            </div>
+          ),
+        )}
+        {itinerary.legs.length === 0 && <p className="text-sm text-slate-400">{t("results.detailNotVerified")}</p>}
 
+        {/* Same-flight connections only -- the backend never puts a
+            deliberate multi-city gap in `layovers` (see providers/base.py's
+            FareSlice), so this is safe to render unconditionally. */}
         {itinerary.layovers.map(([iata, minutes]) => (
           <div key={iata} className="pl-14 text-sm text-slate-500">
-            {formatDuration(minutes)} connection in {iata}
+            {t("results.connectionIn", { duration: formatDuration(minutes), iata })}
           </div>
         ))}
       </div>
 
       {itinerary.ground_transfer && (
         <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-          Ground transport {itinerary.ground_transfer.from_iata} → {itinerary.ground_transfer.to_iata}: ~
-          {formatDuration(itinerary.ground_transfer.minutes)}, ~{formatMoney(itinerary.ground_transfer.cost, itinerary.ground_transfer.currency)} round trip
+          {t("results.groundTransport", {
+            from: itinerary.ground_transfer.from_iata,
+            to: itinerary.ground_transfer.to_iata,
+            duration: formatDuration(itinerary.ground_transfer.minutes),
+            cost: formatMoney(itinerary.ground_transfer.cost, itinerary.ground_transfer.currency),
+          })}
         </div>
       )}
 
       <div className="mt-4 border-t border-slate-100 pt-4">
-        <p className="mb-1.5 text-xs font-semibold tracking-wide text-slate-400 uppercase">Why this trip</p>
+        <p className="mb-1.5 text-xs font-semibold tracking-wide text-slate-400 uppercase">{t("results.whyThisTrip")}</p>
         <ul className="space-y-1">
           {itinerary.explanations.map((note) => (
             <li key={note} className="flex gap-1.5 text-sm text-slate-600">

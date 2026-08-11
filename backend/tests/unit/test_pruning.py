@@ -106,3 +106,25 @@ async def test_planted_deal_is_found_and_stays_attributed_to_its_origin(seeded_s
 
     # And it must be among the very cheapest groups overall (top seed).
     assert groups[0].destination == "HND" and groups[0].depart_date == depart
+
+
+async def test_one_way_sentinel_produces_sane_single_length_grid(seeded_session):
+    # trip_length_min=trip_length_max=0 (the one-way sentinel) must
+    # degenerate the trip-length dimension to a single length=0 iteration
+    # with zero changes to the grouping loop itself -- see spaces.py/
+    # pruning.py's trip_type comments.
+    req = _request(
+        dates={"departure_from": dt.date(2026, 9, 1), "departure_to": dt.date(2026, 9, 10), "trip_length_min": 0, "trip_length_max": 0},
+        trip_type="one_way",
+    )
+    space = await parse_request(seeded_session, req)
+    settings = get_settings()
+    coarse = await generate_coarse(seeded_session, space, settings)
+    groups = await prune_and_expand(seeded_session, space, coarse, settings)
+
+    assert groups, "expected at least one surviving candidate group"
+    for group in groups:
+        assert group.trip_length == 0
+        for c in group.candidates:
+            assert c.trip_length == 0
+            assert c.return_date == c.depart_date

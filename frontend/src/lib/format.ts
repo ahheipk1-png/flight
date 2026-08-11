@@ -13,6 +13,11 @@ export function formatDuration(totalMinutes: number): string {
   return `${hours}h${minutes.toString().padStart(2, "0")}`;
 }
 
+export function formatDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+}
+
 export function formatDateRange(departIso: string, returnIso: string): string {
   const depart = new Date(`${departIso}T00:00:00`);
   const ret = new Date(`${returnIso}T00:00:00`);

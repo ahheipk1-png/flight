@@ -1,23 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSearchState, postSearch } from "@/lib/api";
-import type { ItineraryOut, SearchRequestBody, SearchStage } from "@/lib/types";
+import { getSearchState, postMultiCitySearch, postSearch } from "@/lib/api";
+import type { ItineraryOut, SearchStage, SearchSubmission } from "@/lib/types";
 
 export type UiState = "idle" | "searching" | "complete" | "results" | "error";
 
 const POLL_INTERVAL_MS = 700;
 const COMPLETE_HOLD_MS = 700;
-
-export const STAGE_LABEL: Record<SearchStage, string> = {
-  queued: "Getting started…",
-  generating: "Checking flexible dates and destinations…",
-  pruning: "Narrowing down the best neighborhoods…",
-  verifying: "Checking live prices and connections…",
-  ranking: "Comparing nearby airports and stopovers…",
-  done: "Done",
-  error: "Something went wrong",
-};
 
 interface SearchResultState {
   itineraries: ItineraryOut[];
@@ -42,7 +32,7 @@ export function useSearch() {
   useEffect(() => stopPolling, [stopPolling]);
 
   const runSearch = useCallback(
-    async (body: SearchRequestBody, token: string) => {
+    async (submission: SearchSubmission, token: string) => {
       stopPolling();
       setError(null);
       setResult(null);
@@ -50,7 +40,10 @@ export function useSearch() {
       setUiState("searching");
 
       try {
-        const { search_id } = await postSearch(body, token);
+        const { search_id } =
+          submission.tripType === "multi_city"
+            ? await postMultiCitySearch(submission.body, token)
+            : await postSearch(submission.body, token);
         const poll = async () => {
           const controller = new AbortController();
           pollAbortRef.current = controller;

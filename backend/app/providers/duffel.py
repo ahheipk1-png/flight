@@ -51,7 +51,7 @@ import re
 
 import httpx
 
-from app.providers.base import FareLeg, FareOption, FareProvider, FareQuery
+from app.providers.base import FareLeg, FareOption, FareProvider, FareQuery, FareSlice, MultiCityLeg
 
 DUFFEL_URL = "https://api.duffel.com/air/offer_requests"
 DUFFEL_VERSION = "v2"
@@ -157,7 +157,10 @@ def _parse_offer(offer: dict) -> FareOption | None:
 
 
 def parse_response(data: dict, query: FareQuery) -> list[FareOption]:
-    """Pure function, no I/O -- this is what the fixture-based tests target."""
+    """Pure function, no I/O -- this is what the fixture-based tests target.
+    Works unchanged for one-way queries too: _parse_offer only ever reads
+    slices[0], and a one-way request only ever sends/gets back 1 slice.
+    """
     if "errors" in data:
         raise DuffelError(str(data["errors"]))
 
@@ -168,6 +171,68 @@ def parse_response(data: dict, query: FareQuery) -> list[FareOption]:
         if option is None:
             continue
         if query.max_stops is not None and option.stops > query.max_stops:
+            continue
+        options.append(option)
+
+    options.sort(key=lambda o: o.price)
+    return options
+
+
+def _parse_slice(slice_data: dict) -> FareSlice:
+    segments = slice_data.get("segments") or []
+    legs = _extract_outbound_legs(segments)
+    layovers = _layovers_from_legs(legs)
+    duration = _parse_iso8601_duration_min(slice_data.get("duration"))
+    if not duration:
+        duration = sum(l.duration_min for l in legs) + sum(m for _, m in layovers)
+    return FareSlice(legs=tuple(legs), layovers=layovers, stops=len(layovers), duration_min=duration)
+
+
+def _parse_multi_city_offer(offer: dict) -> FareOption | None:
+    raw_slices = offer.get("slices") or []
+    if not raw_slices:
+        return None
+    total_amount = offer.get("total_amount")
+    if total_amount is None:
+        return None
+
+    slices = [_parse_slice(sl) for sl in raw_slices]
+    all_legs = tuple(leg for sl in slices for leg in sl.legs)
+    # Inter-slice gaps (deliberate city stops) never enter this tuple --
+    # only each slice's own same-flight connections do.
+    flat_layovers = tuple(lo for sl in slices for lo in sl.layovers)
+    carriers = tuple(dict.fromkeys(leg.carrier for leg in all_legs))
+
+    return FareOption(
+        price=float(total_amount),
+        currency=offer.get("total_currency", "CAD"),
+        outbound_legs=all_legs,
+        layovers=flat_layovers,
+        total_duration_min=sum(sl.duration_min for sl in slices),
+        stops=sum(sl.stops for sl in slices),
+        carriers=carriers,
+        inbound_detail="full",
+        raw=offer,
+        slices=tuple(slices),
+    )
+
+
+def parse_multi_city_response(data: dict, *, max_stops: int | None) -> list[FareOption]:
+    """Pure function, no I/O -- mirrors parse_response's fixture-testing
+    pattern. Unlike SerpApi (see serpapi_google_flights.py), Duffel's
+    response slices[] already matches 1:1 with the requested slices, so no
+    flat-list-to-slices reconstruction is needed here.
+    """
+    if "errors" in data:
+        raise DuffelError(str(data["errors"]))
+
+    offers = ((data.get("data") or {}).get("offers")) or []
+    options: list[FareOption] = []
+    for offer in offers:
+        option = _parse_multi_city_offer(offer)
+        if option is None:
+            continue
+        if max_stops is not None and any(sl.stops > max_stops for sl in option.slices):
             continue
         options.append(option)
 
@@ -190,30 +255,72 @@ class DuffelFareProvider:
             "Content-Type": "application/json",
         }
 
-    def _body(self, query: FareQuery) -> dict:
+    def _slices_body(self, slices: list[dict], *, adults: int, max_stops: int | None) -> dict:
         data: dict = {
-            "slices": [
+            "slices": slices,
+            "passengers": [{"type": "adult"} for _ in range(adults)],
+            "cabin_class": "economy",
+        }
+        if max_stops is not None:
+            data["max_connections"] = max_stops
+        return {"data": data}
+
+    def _body(self, query: FareQuery) -> dict:
+        return self._slices_body(
+            [
                 {"origin": query.origin, "destination": query.destination, "departure_date": query.depart_date.isoformat()},
                 {"origin": query.destination, "destination": query.origin, "departure_date": query.return_date.isoformat()},
             ],
-            "passengers": [{"type": "adult"} for _ in range(query.adults)],
-            "cabin_class": "economy",
-        }
-        if query.max_stops is not None:
-            data["max_connections"] = query.max_stops
-        return {"data": data}
+            adults=query.adults,
+            max_stops=query.max_stops,
+        )
 
-    async def search_round_trip(self, query: FareQuery) -> list[FareOption]:
+    def _one_way_body(self, query: FareQuery) -> dict:
+        return self._slices_body(
+            [{"origin": query.origin, "destination": query.destination, "departure_date": query.depart_date.isoformat()}],
+            adults=query.adults,
+            max_stops=query.max_stops,
+        )
+
+    def _multi_city_body(self, legs: list[MultiCityLeg], *, adults: int, max_stops: int | None) -> dict:
+        return self._slices_body(
+            [{"origin": leg.origin, "destination": leg.destination, "departure_date": leg.date.isoformat()} for leg in legs],
+            adults=adults,
+            max_stops=max_stops,
+        )
+
+    async def _post(self, body: dict) -> dict:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.post(
                 DUFFEL_URL,
                 params={"return_offers": "true"},
                 headers=self._headers(),
-                json=self._body(query),
+                json=body,
             )
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json()
+
+    async def search_round_trip(self, query: FareQuery) -> list[FareOption]:
+        data = await self._post(self._body(query))
         return parse_response(data, query)
+
+    async def search_one_way(self, query: FareQuery) -> list[FareOption]:
+        data = await self._post(self._one_way_body(query))
+        return parse_response(data, query)
+
+    async def search_multi_city(
+        self,
+        legs: list[MultiCityLeg],
+        *,
+        adults: int = 1,
+        currency: str = "CAD",
+        max_stops: int | None = None,
+    ) -> list[FareOption]:
+        # currency has no effect on the request (see module docstring's
+        # "no currency field" known limitation -- true for every trip type,
+        # not just round trip); kept for FareProvider protocol conformance.
+        data = await self._post(self._multi_city_body(legs, adults=adults, max_stops=max_stops))
+        return parse_multi_city_response(data, max_stops=max_stops)
 
 
 def build_duffel_provider(api_key: str) -> FareProvider:

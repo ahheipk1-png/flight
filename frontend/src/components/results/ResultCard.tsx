@@ -1,15 +1,38 @@
-import { formatDateRange, formatDuration, formatMoney, routeLabel } from "@/lib/format";
-import type { ItineraryOut } from "@/lib/types";
+"use client";
+
+import { formatDate, formatDateRange, formatDuration, formatMoney, routeLabel } from "@/lib/format";
+import { useLocale } from "@/lib/i18n/LocaleContext";
+import { localizedCityName } from "@/lib/i18n/placeNames";
+import type { ItineraryOut, TripType } from "@/lib/types";
 
 interface ResultCardProps {
   itinerary: ItineraryOut;
   rank: number;
+  tripType: TripType;
   selected: boolean;
   onSelect: () => void;
 }
 
-export function ResultCard({ itinerary, rank, selected, onSelect }: ResultCardProps) {
-  const route = routeLabel([itinerary.origin.iata, ...itinerary.layovers.map(([iata]) => iata), itinerary.destination.iata]);
+export function ResultCard({ itinerary, rank, tripType, selected, onSelect }: ResultCardProps) {
+  const { t, locale } = useLocale();
+  const isOneWay = tripType === "one_way";
+  const isMultiCity = tripType === "multi_city";
+
+  const route = isMultiCity
+    ? routeLabel([itinerary.origin.iata, ...(itinerary.city_stops ?? []).map((a) => a.iata), itinerary.destination.iata])
+    : routeLabel([itinerary.origin.iata, ...itinerary.layovers.map(([iata]) => iata), itinerary.destination.iata]);
+
+  const dateLabel = isOneWay ? formatDate(itinerary.depart_date) : formatDateRange(itinerary.depart_date, itinerary.return_date);
+  const lengthLabel = isOneWay
+    ? t("results.oneWayLabel")
+    : isMultiCity
+      ? t("results.multiCityLabel")
+      : t("results.tripLengthDays", { days: itinerary.trip_length });
+
+  const stopsLabel =
+    itinerary.stops === 0
+      ? t("results.nonstop")
+      : t(itinerary.stops > 1 ? "results.stopsMany" : "results.stopsOne", { count: itinerary.stops });
 
   return (
     <button
@@ -24,14 +47,15 @@ export function ResultCard({ itinerary, rank, selected, onSelect }: ResultCardPr
         <div>
           {rank === 0 && (
             <span className="mb-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold tracking-wide text-amber-700 uppercase">
-              Best value
+              {t("results.bestValue")}
             </span>
           )}
           <p className="text-base font-semibold text-slate-900">
-            {itinerary.origin.city} → {itinerary.destination.city}
+            {localizedCityName(itinerary.origin.iata, itinerary.origin.city, locale)} →{" "}
+            {localizedCityName(itinerary.destination.iata, itinerary.destination.city, locale)}
           </p>
           <p className="text-sm text-slate-500">
-            {formatDateRange(itinerary.depart_date, itinerary.return_date)} · {itinerary.trip_length} days
+            {dateLabel} · {lengthLabel}
           </p>
         </div>
         <div className="text-right">
@@ -41,14 +65,14 @@ export function ResultCard({ itinerary, rank, selected, onSelect }: ResultCardPr
               itinerary.verified ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
             }`}
           >
-            {itinerary.verified ? "Verified" : "Indicative"}
+            {itinerary.verified ? t("results.verified") : t("results.indicative")}
           </span>
         </div>
       </div>
 
       <p className="mt-2 font-mono text-sm text-slate-600">{route}</p>
       <p className="text-sm text-slate-500">
-        {formatDuration(itinerary.total_duration_min)} · {itinerary.stops === 0 ? "Nonstop" : `${itinerary.stops} stop${itinerary.stops > 1 ? "s" : ""}`}
+        {formatDuration(itinerary.total_duration_min)} · {stopsLabel}
       </p>
 
       {itinerary.explanations.length > 0 && (

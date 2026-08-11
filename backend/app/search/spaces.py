@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.geo import Airport
+from app.providers.base import TripType
 from app.schemas.search import SearchRequest
 from app.services.geo import get_destination_airports, get_origin_group, resolve_equivalence
 
@@ -21,6 +22,7 @@ class SearchSpace:
     alternate_origins: list[Airport]
     destination_airports: list[Airport]  # every airport across the requested regions
     destination_primaries: list[Airport]  # metro-primary only, for the coarse pass
+    trip_type: TripType
     departure_from: dt.date
     departure_to: dt.date
     trip_length_min: int
@@ -66,6 +68,7 @@ async def parse_request(session: AsyncSession, req: SearchRequest) -> SearchSpac
         alternate_origins=alternates,
         destination_airports=destination_all,
         destination_primaries=destination_primaries,
+        trip_type=req.trip_type,
         departure_from=req.dates.departure_from,
         departure_to=req.dates.departure_to,
         trip_length_min=req.dates.trip_length_min,

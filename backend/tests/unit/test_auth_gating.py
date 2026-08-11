@@ -18,6 +18,14 @@ VALID_SEARCH_BODY = {
     "budget": {"currency": "CAD", "max_total": 2500},
 }
 
+VALID_MULTI_CITY_BODY = {
+    "legs": [
+        {"destination": "IST", "date": "2026-09-10"},
+        {"destination": "DXB", "date": "2026-09-15"},
+    ],
+    "budget": {"currency": "CAD", "max_total": 5000},
+}
+
 
 async def _make_admin(session, username: str = "admin1") -> User:
     now = dt.datetime.now(dt.UTC)
@@ -151,6 +159,10 @@ async def test_unauthenticated_requests_rejected(client, db_session):
     assert (await client.get("/api/admin/accounts")).status_code == 401
 
 
+async def test_unauthenticated_multi_city_search_rejected(client, db_session):
+    assert (await client.post("/api/search/multi-city", json=VALID_MULTI_CITY_BODY)).status_code == 401
+
+
 # ---------- the "no fallback" search gate itself ----------
 
 
@@ -213,6 +225,61 @@ async def test_approved_user_with_key_can_search_uses_their_own_key_not_site_wid
     assert me["has_api_key"] is True
 
     resp = await client.post("/api/search", headers=_auth(user["token"]), json=VALID_SEARCH_BODY)
+    assert resp.status_code == 200
+    search_id = resp.json()["search_id"]
+
+    import asyncio
+
+    state = None
+    for _ in range(500):
+        state = (await client.get(f"/api/search/{search_id}", headers=_auth(user["token"]))).json()
+        if state["status"] in ("done", "error"):
+            break
+        await asyncio.sleep(0.02)
+
+    assert state["status"] == "done", state.get("error")
+    assert captured_keys == ["this-friends-own-key"]
+
+
+# ---------- the "no fallback" gate applies to multi-city too ----------
+
+
+async def test_approved_user_without_key_cannot_multi_city_search(client, db_session):
+    await _make_admin(db_session)
+    admin = await _login(client, "admin1", "adminpassword")
+    await client.post("/api/auth/register", json={"username": "nokeymc", "password": "friendpass123"})
+    accounts = (await client.get("/api/admin/accounts", headers=_auth(admin["token"]))).json()
+    target = next(a for a in accounts if a["username"] == "nokeymc")
+    await client.post(f"/api/admin/accounts/{target['id']}/approve", headers=_auth(admin["token"]))
+
+    user = await _login(client, "nokeymc", "friendpass123")
+    r = await client.post("/api/search/multi-city", headers=_auth(user["token"]), json=VALID_MULTI_CITY_BODY)
+    assert r.status_code == 400
+    assert "key" in r.json()["detail"].lower()
+
+
+async def test_approved_user_with_key_can_multi_city_search_uses_their_own_key(client, seeded_session, monkeypatch):
+    captured_keys = []
+
+    def _fake_build(api_key):
+        captured_keys.append(api_key)
+        return mock_provider
+
+    monkeypatch.setattr("app.api.deps.build_serpapi_provider", _fake_build)
+
+    await _make_admin(seeded_session)
+    admin_login = await _login(client, "admin1", "adminpassword")
+    await client.post("/api/auth/register", json={"username": "haskeymc", "password": "friendpass123"})
+    accounts = (await client.get("/api/admin/accounts", headers=_auth(admin_login["token"]))).json()
+    target = next(a for a in accounts if a["username"] == "haskeymc")
+    await client.post(f"/api/admin/accounts/{target['id']}/approve", headers=_auth(admin_login["token"]))
+
+    user = await _login(client, "haskeymc", "friendpass123")
+    await client.put(
+        "/api/auth/api-key", headers=_auth(user["token"]), json={"serpapi_api_key": "this-friends-own-key"}
+    )
+
+    resp = await client.post("/api/search/multi-city", headers=_auth(user["token"]), json=VALID_MULTI_CITY_BODY)
     assert resp.status_code == 200
     search_id = resp.json()["search_id"]
 

@@ -20,6 +20,20 @@ they ever reach verification -- silently breaking the nearby-airport
 savings feature (spec §31) on a fresh database. ORIGIN_FACTOR (shared
 with the mock provider's simulated market) is applied so cold-start
 estimates already reflect known airport-level pricing patterns.
+
+All three tiers are also trip_type-scoped (round_trip vs one_way, see
+providers/base.py) -- tiers 1-2 filter fare_observations by it so a
+one-way price never answers a round-trip query for the same route/dates
+or vice versa, and tier 3 applies ONE_WAY_FACTOR to the (round-trip-only)
+baseline table. That flat factor is a known, accepted approximation: real
+one-way/round-trip price ratios vary by route (competitive short-haul
+routes often price near 50%, some long-haul/legacy-carrier routes well
+above it), so a single constant can't capture that variance. It only
+matters at cold start, though -- same multiplier applies to every date for
+a given destination, so within-destination date ranking (what
+search/pruning.py actually needs) is unaffected, and tiers 1-2 self-heal
+as real one-way observations accumulate, same as ORIGIN_FACTOR already
+does today.
 """
 
 from __future__ import annotations
@@ -32,11 +46,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import SEED_DIR
 from app.models.fares import FareObservation
+from app.providers.base import TripType
 from app.providers.mock import ORIGIN_FACTOR
 
 INDICATIVE_MAX_AGE_DAYS = 7
 NEAREST_DATE_WINDOW_DAYS = 10
 GENERIC_FALLBACK_CAD = 1100.0
+# Cold-start-only approximation applied to the round-trip baseline table --
+# see module docstring.
+ONE_WAY_FACTOR = 0.6
 
 _BASELINES: dict[str, float] | None = None
 
@@ -57,6 +75,7 @@ async def estimate(
     depart_date: dt.date,
     return_date: dt.date,
     *,
+    trip_type: TripType = "round_trip",
     origin_metro: str = "toronto",
     now: dt.datetime | None = None,
 ) -> tuple[float, str]:
@@ -75,6 +94,7 @@ async def estimate(
                     FareObservation.destination == destination,
                     FareObservation.departure_date == depart_date,
                     FareObservation.return_date == return_date,
+                    FareObservation.trip_type == trip_type,
                     FareObservation.observed_at >= cutoff,
                 )
                 .order_by(FareObservation.observed_at.desc())
@@ -94,6 +114,7 @@ async def estimate(
                 select(FareObservation).where(
                     FareObservation.origin == origin,
                     FareObservation.destination == destination,
+                    FareObservation.trip_type == trip_type,
                     FareObservation.departure_date >= window_lo,
                     FareObservation.departure_date <= window_hi,
                 )
@@ -115,6 +136,8 @@ async def estimate(
 
     origin_factor = ORIGIN_FACTOR.get(origin, 1.0)
     baseline = _baseline(origin_metro, destination)
-    if baseline is not None:
-        return round(baseline * origin_factor, 2), "baseline"
-    return round(GENERIC_FALLBACK_CAD * origin_factor, 2), "baseline"
+    base_price = baseline if baseline is not None else GENERIC_FALLBACK_CAD
+    price = base_price * origin_factor
+    if trip_type == "one_way":
+        price *= ONE_WAY_FACTOR
+    return round(price, 2), "baseline"

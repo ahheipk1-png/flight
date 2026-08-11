@@ -40,12 +40,29 @@ class VerifiedItinerary:
     verified: bool  # False when we fell back to an indicative estimate (budget exhausted)
 
 
-def _passes_hard_constraints(option: FareOption, space: SearchSpace) -> bool:
-    if option.stops > space.max_stops:
-        return False
-    for _, minutes in option.layovers:
-        if not (space.min_normal_minutes <= minutes <= space.max_normal_minutes):
+def passes_hard_constraints(option: FareOption, space: SearchSpace) -> bool:
+    """Not underscore-prefixed: also called directly by
+    search/pipeline.py's run_multi_city_search, which has no CandidateGroup
+    to verify against and so never goes through verify_top/verify_one.
+    """
+    if option.slices:
+        # Manual multi-city: validate each flown slice independently. The
+        # deliberate gap BETWEEN slices (a multi-day city stop) is not a
+        # layover and must never be checked against min/max_normal_minutes
+        # -- that window means "is this a comfortable flight connection",
+        # not "is this a reasonable amount of time to spend in a city".
+        for sl in option.slices:
+            if sl.stops > space.max_stops:
+                return False
+            for _, minutes in sl.layovers:
+                if not (space.min_normal_minutes <= minutes <= space.max_normal_minutes):
+                    return False
+    else:
+        if option.stops > space.max_stops:
             return False
+        for _, minutes in option.layovers:
+            if not (space.min_normal_minutes <= minutes <= space.max_normal_minutes):
+                return False
     # Budget is interpreted per person (MVP 1 assumption; see plan risks --
     # adults=1 is the supported default, so this is exact in the common case).
     if option.price > space.max_total:
@@ -119,6 +136,7 @@ async def verify_top(
             adults=space.adults,
             currency=space.currency,
             max_stops=space.max_stops,
+            trip_type=space.trip_type,
         )
         async with semaphore, session_scope() as local_session:
             options, degraded = await fare_service.search_cached(
@@ -128,7 +146,8 @@ async def verify_top(
             if degraded:
                 any_degraded = True
                 price, _source = await indicative.estimate(
-                    local_session, candidate.origin, candidate.destination, candidate.depart_date, candidate.return_date
+                    local_session, candidate.origin, candidate.destination, candidate.depart_date, candidate.return_date,
+                    trip_type=space.trip_type,
                 )
                 if price > space.max_total:
                     return None
@@ -147,7 +166,7 @@ async def verify_top(
                     candidate.trip_length, fallback, verified=False,
                 )
 
-        passing = [o for o in options if _passes_hard_constraints(o, space)]
+        passing = [o for o in options if passes_hard_constraints(o, space)]
         if not passing:
             return None
         best = min(passing, key=lambda o: o.price)

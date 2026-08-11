@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface ApiKeySettingsProps {
   hasApiKey: boolean;
@@ -14,6 +15,7 @@ const INPUT_CLASS =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-none";
 
 export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings" }: ApiKeySettingsProps) {
+  const { t } = useLocale();
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
       setKey("");
       setSavedJustNow(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save the key.");
+      setError(err instanceof Error ? err.message : t("apiKey.saveError"));
     } finally {
       setBusy(false);
     }
@@ -41,7 +43,7 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
     try {
       await onClear();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not remove the key.");
+      setError(err instanceof Error ? err.message : t("apiKey.removeError"));
     } finally {
       setBusy(false);
     }
@@ -51,31 +53,28 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
     <div className={variant === "gate" ? "mx-auto max-w-md text-center" : "max-w-md"}>
       {variant === "gate" && (
         <>
-          <h2 className="text-lg font-semibold text-slate-800">Add your SerpApi key to search</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            There&apos;s no shared key — every search runs on your own SerpApi account. Free plans include 250
-            searches/month.
-          </p>
+          <h2 className="text-lg font-semibold text-slate-800">{t("apiKey.gateTitle")}</h2>
+          <p className="mt-1 text-sm text-slate-500">{t("apiKey.gateSubtitle")}</p>
         </>
       )}
 
       {hasApiKey && (
         <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-left text-sm text-emerald-700">
-          A key is saved on your account. {variant === "settings" && "Paste a new one below to replace it."}
+          {t("apiKey.savedNote")} {variant === "settings" && t("apiKey.replaceNote")}
         </p>
       )}
       {savedJustNow && variant === "gate" && (
-        <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Saved — you can search now.</p>
+        <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{t("apiKey.savedJustNow")}</p>
       )}
 
       <form onSubmit={handleSave} className="mt-4 space-y-3 text-left">
         <label className="block">
-          <span className="mb-1 block text-sm text-slate-600">SerpApi key</span>
+          <span className="mb-1 block text-sm text-slate-600">{t("apiKey.fieldLabel")}</span>
           <input
             type="text"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder="Paste your key from serpapi.com"
+            placeholder={t("apiKey.fieldPlaceholder")}
             className={INPUT_CLASS}
           />
         </label>
@@ -86,7 +85,7 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
             disabled={busy || !key.trim()}
             className="flex-1 rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:opacity-60"
           >
-            {busy ? "Saving…" : hasApiKey ? "Replace key" : "Save key"}
+            {busy ? t("apiKey.saveBtnBusy") : hasApiKey ? t("apiKey.replaceBtn") : t("apiKey.saveBtn")}
           </button>
           {hasApiKey && (
             <button
@@ -95,7 +94,7 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
               disabled={busy}
               className="rounded-full bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-60"
             >
-              Remove
+              {t("apiKey.removeBtn")}
             </button>
           )}
         </div>

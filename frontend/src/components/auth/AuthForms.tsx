@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface AuthFormsProps {
   onRegister: (username: string, password: string, serpapiApiKey?: string) => Promise<string>;
@@ -13,17 +14,22 @@ const INPUT_CLASS =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-none";
 
 export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsProps) {
+  const { t } = useLocale();
   const [tab, setTab] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [serpapiApiKey, setSerpapiApiKey] = useState("");
   const [busy, setBusy] = useState(false);
-  const [registeredMessage, setRegisteredMessage] = useState<string | null>(null);
+  // The backend's raw confirmation text is out of scope for translation
+  // this pass (it's dynamically generated, not a fixed UI string) -- the
+  // KNOWN success case shows our own translated copy instead once this
+  // becomes non-null, ignoring whatever the backend actually said.
+  const [justRegistered, setJustRegistered] = useState(false);
 
-  function switchTab(t: "login" | "register") {
-    setTab(t);
+  function switchTab(next: "login" | "register") {
+    setTab(next);
     clearError();
-    setRegisteredMessage(null);
+    setJustRegistered(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -33,8 +39,8 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
       if (tab === "login") {
         await onLogin(username, password);
       } else {
-        const message = await onRegister(username, password, serpapiApiKey || undefined);
-        setRegisteredMessage(message);
+        await onRegister(username, password, serpapiApiKey || undefined);
+        setJustRegistered(true);
         setTab("login");
         setPassword("");
       }
@@ -49,20 +55,20 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
     <div className="mx-auto max-w-sm">
       <div className="mb-6 flex justify-center gap-2">
         <TabButton active={tab === "login"} onClick={() => switchTab("login")}>
-          Log in
+          {t("auth.tabLogin")}
         </TabButton>
         <TabButton active={tab === "register"} onClick={() => switchTab("register")}>
-          Request account
+          {t("auth.tabRegister")}
         </TabButton>
       </div>
 
-      {registeredMessage && (
-        <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{registeredMessage}</p>
+      {justRegistered && (
+        <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{t("auth.registeredMessage")}</p>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block">
-          <span className="mb-1 block text-sm text-slate-600">Username</span>
+          <span className="mb-1 block text-sm text-slate-600">{t("auth.usernameLabel")}</span>
           <input
             type="text"
             value={username}
@@ -75,7 +81,9 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm text-slate-600">{tab === "login" ? "Password" : "Choose a password (8+ characters)"}</span>
+          <span className="mb-1 block text-sm text-slate-600">
+            {tab === "login" ? t("auth.passwordLabelLogin") : t("auth.passwordLabelRegister")}
+          </span>
           <input
             type="password"
             value={password}
@@ -90,20 +98,18 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
 
         {tab === "register" && (
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">Your own SerpApi key (optional now, required to search)</span>
+            <span className="mb-1 block text-sm text-slate-600">{t("auth.apiKeyLabel")}</span>
             <input
               type="text"
               value={serpapiApiKey}
               onChange={(e) => setSerpapiApiKey(e.target.value)}
-              placeholder="Can add this later in Settings"
+              placeholder={t("auth.apiKeyPlaceholder")}
               className={INPUT_CLASS}
             />
           </label>
         )}
 
-        {tab === "register" && (
-          <p className="text-xs text-slate-400">An admin approves new accounts before your first log-in.</p>
-        )}
+        {tab === "register" && <p className="text-xs text-slate-400">{t("auth.approvalNote")}</p>}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -112,7 +118,7 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
           disabled={busy}
           className="w-full rounded-full bg-sky-600 px-6 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:opacity-60"
         >
-          {busy ? "Please wait…" : tab === "login" ? "Log in" : "Request account"}
+          {busy ? t("auth.submitBusy") : tab === "login" ? t("auth.submitLogin") : t("auth.submitRegister")}
         </button>
       </form>
     </div>

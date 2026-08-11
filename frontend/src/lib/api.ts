@@ -2,6 +2,7 @@ import type {
   AdminAccountOut,
   MeOut,
   MetaResponse,
+  MultiCitySearchRequestBody,
   SearchRequestBody,
   SearchStateResponse,
   SessionOut,
@@ -46,6 +47,18 @@ export function getMeta(signal?: AbortSignal): Promise<MetaResponse> {
 
 export function postSearch(body: SearchRequestBody, token: string, signal?: AbortSignal): Promise<{ search_id: string }> {
   return request<{ search_id: string }>("/api/search", { method: "POST", body: JSON.stringify(body), signal }, token);
+}
+
+export function postMultiCitySearch(
+  body: MultiCitySearchRequestBody,
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ search_id: string }> {
+  return request<{ search_id: string }>(
+    "/api/search/multi-city",
+    { method: "POST", body: JSON.stringify(body), signal },
+    token,
+  );
 }
 
 export function getSearchState(searchId: string, token: string, signal?: AbortSignal): Promise<SearchStateResponse> {

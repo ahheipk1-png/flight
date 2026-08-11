@@ -1,8 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { STAGE_LABEL } from "@/hooks/useSearch";
+import { useLocale } from "@/lib/i18n/LocaleContext";
+import type { MessageKey } from "@/lib/i18n/messages";
 import type { SearchStage } from "@/lib/types";
+
+const STAGE_KEY: Record<SearchStage, MessageKey> = {
+  queued: "searching.stage.queued",
+  generating: "searching.stage.generating",
+  pruning: "searching.stage.pruning",
+  verifying: "searching.stage.verifying",
+  ranking: "searching.stage.ranking",
+  done: "searching.stage.done",
+  error: "searching.stage.error",
+};
 
 // Both illustrations render in this exact box (spec: "same visual box and
 // same rendered dimensions so there is no layout jump when the state
@@ -11,6 +22,7 @@ import type { SearchStage } from "@/lib/types";
 const ILLUSTRATION_BOX = "w-[min(420px,78vw)] aspect-[3/2] relative";
 
 export function SearchingState({ stage }: { stage: SearchStage }) {
+  const { t } = useLocale();
   return (
     <div className="flex flex-col items-center gap-6 py-12 text-center">
       <div className="rounded-3xl bg-white/70 p-6 shadow-sm ring-1 ring-slate-900/5">
@@ -26,14 +38,15 @@ export function SearchingState({ stage }: { stage: SearchStage }) {
         </div>
       </div>
       <div className="space-y-1.5">
-        <p className="text-lg font-semibold text-slate-800">Finding smarter ways to fly…</p>
-        <p className="text-sm text-slate-500">{STAGE_LABEL[stage]}</p>
+        <p className="text-lg font-semibold text-slate-800">{t("searching.title")}</p>
+        <p className="text-sm text-slate-500">{t(STAGE_KEY[stage])}</p>
       </div>
     </div>
   );
 }
 
 export function CompleteState() {
+  const { t } = useLocale();
   return (
     <div className="flex flex-col items-center gap-6 py-12 text-center">
       <div className="rounded-3xl bg-white/70 p-6 shadow-sm ring-1 ring-slate-900/5">
@@ -47,7 +60,7 @@ export function CompleteState() {
           />
         </div>
       </div>
-      <p className="text-lg font-semibold text-slate-800">Your smarter trips are ready</p>
+      <p className="text-lg font-semibold text-slate-800">{t("complete.title")}</p>
     </div>
   );
 }

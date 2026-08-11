@@ -22,8 +22,8 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.models.fares import FareObservation
 from app.providers.mock import mock_provider
-from app.schemas.search import SearchRequest
-from app.search.jobs import get_state, start_search
+from app.schemas.search import MultiCitySearchRequest, SearchRequest
+from app.search.jobs import get_state, start_multi_city_search, start_search
 
 SEARCH_BODY = {
     "origin": {"region": "greater_toronto", "max_ground_minutes": 120, "min_saving_per_person": 100},
@@ -78,3 +78,80 @@ async def test_search_end_to_end_mock_mode(seeded_session):
         await seeded_session.execute(select(FareObservation).where(FareObservation.kind == "verified"))
     ).scalars().all()
     assert verified_rows, "verified fare_observations rows should have been written"
+
+
+ONE_WAY_SEARCH_BODY = {
+    "origin": {"region": "greater_toronto", "max_ground_minutes": 120, "min_saving_per_person": 100},
+    "destination": {"regions": ["japan", "south_korea", "taiwan", "hong_kong"]},
+    "dates": {
+        "departure_from": "2026-09-01",
+        "departure_to": "2026-10-31",
+        "trip_length_min": 0,
+        "trip_length_max": 0,
+    },
+    "budget": {"currency": "CAD", "max_total": 1000},
+    "connections": {"max_stops": 1, "min_normal_minutes": 60, "max_normal_minutes": 300},
+    "adults": 1,
+    "trip_type": "one_way",
+}
+
+
+async def test_one_way_search_end_to_end_mock_mode(seeded_session):
+    req = SearchRequest.model_validate(ONE_WAY_SEARCH_BODY)
+    search_id = await start_search(req, mock_provider, get_settings())
+
+    state = None
+    for _ in range(500):
+        state = await get_state(search_id)
+        if state and state["status"] in ("done", "error"):
+            break
+        await asyncio.sleep(0.02)
+
+    assert state is not None
+    assert state["status"] == "done", state.get("error")
+
+    itineraries = state["itineraries"]
+    assert len(itineraries) >= 1, "expected at least one one-way itinerary within a CAD 1000 budget"
+    for it in itineraries:
+        assert it["fare"] <= 1000
+        assert it["trip_length"] == 0
+        assert it["depart_date"] == it["return_date"]
+        assert it["stops"] <= 1
+
+
+MULTI_CITY_SEARCH_BODY = {
+    "legs": [
+        {"destination": "IST", "date": "2026-09-10"},
+        {"destination": "DXB", "date": "2026-09-15"},
+    ],
+    "budget": {"currency": "CAD", "max_total": 5000},
+    "connections": {"max_stops": 2, "min_normal_minutes": 30, "max_normal_minutes": 600},
+    "adults": 1,
+}
+
+
+async def test_multi_city_search_end_to_end_mock_mode(seeded_session):
+    req = MultiCitySearchRequest.model_validate(MULTI_CITY_SEARCH_BODY)
+    search_id = await start_multi_city_search(req, mock_provider, get_settings())
+
+    state = None
+    for _ in range(500):
+        state = await get_state(search_id)
+        if state and state["status"] in ("done", "error"):
+            break
+        await asyncio.sleep(0.02)
+
+    assert state is not None
+    assert state["status"] == "done", state.get("error")
+
+    itineraries = state["itineraries"]
+    assert len(itineraries) == 1, "mock's search_multi_city returns exactly one combined option"
+    it = itineraries[0]
+    assert it["origin"]["iata"] == "YYZ"
+    assert it["destination"]["iata"] == "DXB"
+    assert it["city_stops"] is not None
+    assert [s["iata"] for s in it["city_stops"]] == ["IST"]
+    assert it["fare"] <= 5000
+
+    # Manual multi-city bypasses generate_coarse/prune_and_expand entirely.
+    assert state["meta"]["coarse_count"] == 0

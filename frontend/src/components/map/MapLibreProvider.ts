@@ -36,6 +36,7 @@ const ROLE_COLOR: Record<MarkerRole, string> = {
   "alternate-origin": "#64748b",
   connection: "#64748b",
   destination: "#f59e0b",
+  "city-stop": "#8b5cf6",
 };
 
 function makeMarkerElement(role: MarkerRole): HTMLDivElement {
@@ -53,6 +54,17 @@ function makeMarkerElement(role: MarkerRole): HTMLDivElement {
     el.style.borderRadius = "50%";
     el.style.background = "white";
     el.style.border = `2px solid ${color}`;
+  } else if (role === "city-stop") {
+    // A filled square (vs. destination's star, origin's plain circle, and
+    // connection's hollow dot) -- deliberately distinct at a glance from
+    // every other role, since it means something none of them do: a
+    // multi-day chosen stay, not a connection or an endpoint.
+    el.style.width = "13px";
+    el.style.height = "13px";
+    el.style.background = color;
+    el.style.border = "2px solid white";
+    el.style.boxShadow = "0 1px 2px rgba(0,0,0,0.4)";
+    el.style.transform = "rotate(45deg)";
   } else {
     el.style.width = "14px";
     el.style.height = "14px";

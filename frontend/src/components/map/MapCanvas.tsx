@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { useLocale } from "@/lib/i18n/LocaleContext";
+import { localizedCityName } from "@/lib/i18n/placeNames";
 import type { AirportMeta, ItineraryOut } from "@/lib/types";
 import { MapLibreProvider } from "./MapLibreProvider";
 import type { MapProvider } from "./MapProvider";
@@ -11,6 +13,7 @@ interface MapCanvasProps {
 }
 
 export function MapCanvas({ airports, selected }: MapCanvasProps) {
+  const { locale } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const providerRef = useRef<MapProvider | null>(null);
 
@@ -45,14 +48,14 @@ export function MapCanvas({ airports, selected }: MapCanvasProps) {
       id: `origin-${originIata}`,
       position: { lat: selected.origin.lat, lon: selected.origin.lon },
       role: originIata === "YYZ" ? "origin" : "alternate-origin",
-      label: `${selected.origin.city} (${originIata})`,
+      label: `${localizedCityName(originIata, selected.origin.city, locale)} (${originIata})`,
       popupHtml: `<strong>${originIata}</strong> — ${selected.origin.name}`,
     });
     provider.addAirportMarker({
       id: `dest-${selected.destination.iata}`,
       position: { lat: selected.destination.lat, lon: selected.destination.lon },
       role: "destination",
-      label: `${selected.destination.city} (${selected.destination.iata})`,
+      label: `${localizedCityName(selected.destination.iata, selected.destination.city, locale)} (${selected.destination.iata})`,
       popupHtml: `<strong>${selected.destination.iata}</strong> — ${selected.destination.name}`,
     });
 
@@ -65,8 +68,22 @@ export function MapCanvas({ airports, selected }: MapCanvasProps) {
         id: `conn-${layoverIata}`,
         position: { lat: airport.lat, lon: airport.lon },
         role: "connection",
-        label: `${airport.city} (${layoverIata})`,
+        label: `${localizedCityName(layoverIata, airport.city, locale)} (${layoverIata})`,
         popupHtml: `<strong>${layoverIata}</strong> — ${hours}h${mins.toString().padStart(2, "0")} connection`,
+      });
+    }
+
+    // Manual multi-city only -- deliberate chosen stops, distinct from the
+    // same-flight connections above (see MapProvider.ts's MarkerRole).
+    // AirportRef already carries lat/lon directly, no airportByIata lookup
+    // needed.
+    for (const stop of selected.city_stops ?? []) {
+      provider.addAirportMarker({
+        id: `city-stop-${stop.iata}`,
+        position: { lat: stop.lat, lon: stop.lon },
+        role: "city-stop",
+        label: `${localizedCityName(stop.iata, stop.city, locale)} (${stop.iata})`,
+        popupHtml: `<strong>${stop.iata}</strong> — ${stop.name}`,
       });
     }
 
@@ -84,7 +101,7 @@ export function MapCanvas({ airports, selected }: MapCanvasProps) {
     });
 
     provider.fitItinerary();
-  }, [selected, airportByIata]);
+  }, [selected, airportByIata, locale]);
 
   return <div ref={containerRef} className="h-full w-full overflow-hidden rounded-2xl" />;
 }

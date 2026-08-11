@@ -24,7 +24,14 @@ import math
 import random
 
 from app.config import SEED_DIR
-from app.providers.base import FareLeg, FareOption, FareProvider, FareQuery
+from app.providers.base import FareLeg, FareOption, FareProvider, FareQuery, FareSlice, MultiCityLeg
+
+# Independent from services/indicative.py's ONE_WAY_FACTOR (that one
+# approximates a cold-start baseline before any real observations exist;
+# this one IS the simulated market price) -- importing one from the other
+# would also be circular, since indicative.py already imports ORIGIN_FACTOR
+# from this module.
+ONE_WAY_PRICE_FACTOR = 0.6
 
 # Relative pricing pull per Toronto-region origin airport. Deliberately
 # gives BUF/YHM a strong pull below YYZ so the nearby-airport savings
@@ -133,6 +140,28 @@ def _price_for(query: FareQuery, rng: random.Random, *, is_onestop: bool) -> flo
     return round(price, 2)
 
 
+def _price_for_one_way(query: FareQuery, rng: random.Random, *, is_onestop: bool) -> float:
+    """Deliberately does not delegate to _price_for: that formula's nights
+    factor is meaningless here (there is no return leg), and reusing it
+    with nights=0 would wrongly apply the <7-night short-trip surcharge.
+    """
+    base = _baseline(query.destination)
+    price = (
+        base
+        * ONE_WAY_PRICE_FACTOR
+        * ORIGIN_FACTOR.get(query.origin, 1.0)
+        * _seasonal_factor(query.depart_date)
+        * _weekday_factor(query.depart_date)
+    )
+    if is_onestop:
+        price *= rng.uniform(0.85, 0.94)
+    if rng.random() < 0.07:
+        price *= 0.74  # planted deal
+    price *= rng.uniform(0.93, 1.08)  # noise
+    price *= query.adults
+    return round(price, 2)
+
+
 def _make_option(
     query: FareQuery, rng: random.Random, *, hub: str | None, price: float
 ) -> FareOption:
@@ -197,6 +226,92 @@ class MockFareProvider:
 
         options.sort(key=lambda o: o.price)
         return options
+
+    async def search_one_way(self, query: FareQuery) -> list[FareOption]:
+        rng = _seeded_rng(query)
+        options: list[FareOption] = []
+
+        options.append(_make_option(query, rng, hub=None, price=_price_for_one_way(query, rng, is_onestop=False)))
+
+        hub = CONNECTING_HUB.get(query.destination)
+        if hub and hub != query.origin:
+            options.append(_make_option(query, rng, hub=hub, price=_price_for_one_way(query, rng, is_onestop=True)))
+
+        if query.max_stops is not None:
+            options = [o for o in options if o.stops <= query.max_stops]
+
+        options.sort(key=lambda o: o.price)
+        return options
+
+    async def search_multi_city(
+        self,
+        legs: list[MultiCityLeg],
+        *,
+        adults: int = 1,
+        currency: str = "CAD",
+        max_stops: int | None = None,
+    ) -> list[FareOption]:
+        """Returns exactly one combined itinerary (sum of per-leg prices),
+        not multiple variants -- unlike search_round_trip/search_one_way,
+        there's no small set of "the" alternatives to enumerate for an
+        N-leg chain without combinatorial blowup, and this is a mock
+        provider, not a search-quality benchmark. Per-leg nonstop-vs-hub
+        routing is still deterministic (seeded on that leg's own
+        origin/destination/date), so repeated searches are stable.
+        """
+        slices: list[FareSlice] = []
+        all_legs: list[FareLeg] = []
+        all_layovers: list[tuple[str, int]] = []
+        all_carriers: list[str] = []
+        total_price = 0.0
+        total_duration = 0
+        total_stops = 0
+
+        for leg in legs:
+            leg_query = FareQuery(
+                origin=leg.origin,
+                destination=leg.destination,
+                depart_date=leg.date,
+                return_date=leg.date,
+                adults=adults,
+                currency=currency,
+                max_stops=max_stops,
+                trip_type="one_way",
+            )
+            rng = _seeded_rng(leg_query)
+            hub = CONNECTING_HUB.get(leg.destination)
+            use_hub = bool(hub and hub != leg.origin and rng.random() < 0.35)
+            price = _price_for_one_way(leg_query, rng, is_onestop=use_hub)
+            option = _make_option(leg_query, rng, hub=hub if use_hub else None, price=price)
+
+            total_price += option.price
+            all_legs.extend(option.outbound_legs)
+            all_layovers.extend(option.layovers)
+            all_carriers.extend(option.carriers)
+            total_duration += option.total_duration_min
+            total_stops += option.stops
+            slices.append(
+                FareSlice(
+                    legs=option.outbound_legs,
+                    layovers=option.layovers,
+                    stops=option.stops,
+                    duration_min=option.total_duration_min,
+                )
+            )
+
+        combined = FareOption(
+            price=round(total_price, 2),
+            currency=currency,
+            outbound_legs=tuple(all_legs),
+            layovers=tuple(all_layovers),
+            total_duration_min=total_duration,
+            stops=total_stops,
+            carriers=tuple(dict.fromkeys(all_carriers)),
+            inbound_detail="full",
+            raw={"mock": True, "template": "multi_city"},
+            slices=tuple(slices),
+        )
+        return [combined]
 
 
 mock_provider: FareProvider = MockFareProvider()

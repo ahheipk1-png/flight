@@ -47,6 +47,11 @@ class ItineraryOut(BaseModel):
     carriers: list[str]
     verified: bool
     ground_transfer: GroundTransferOut | None
+    # Manual multi-city only: the intermediate leg endpoints in order (not
+    # including the final destination, which is already `destination`
+    # above). None for round-trip/one-way. Kept separate from `layovers`,
+    # which means same-flight connections, not deliberate city stops.
+    city_stops: list[AirportRef] | None = None
     explanations: list[str]
     # Precomputed sort keys so the frontend's ranking tabs re-sort
     # client-side with no refetch (spec: tabs never trigger a new search).

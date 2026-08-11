@@ -26,6 +26,11 @@ class FareObservation(Base):
     departure_date: Mapped[dt.date]
     return_date: Mapped[dt.date]
     trip_length: Mapped[int] = mapped_column(Integer)
+    # "round_trip" | "one_way". One-way rows store return_date ==
+    # departure_date (trip_length 0) as a sentinel -- this column is what
+    # keeps that from being confused with a genuine same-day round trip
+    # when services/indicative.py looks up price history.
+    trip_type: Mapped[str] = mapped_column(String(20), default="round_trip")
     cabin: Mapped[str] = mapped_column(String(20), default="economy")
     fare: Mapped[float] = mapped_column(Float)
     currency: Mapped[str] = mapped_column(String(3), default="CAD")

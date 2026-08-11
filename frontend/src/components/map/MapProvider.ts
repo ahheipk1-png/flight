@@ -4,7 +4,12 @@
 
 import type { LatLon } from "./geo";
 
-export type MarkerRole = "origin" | "alternate-origin" | "connection" | "destination";
+// "city-stop" is deliberately distinct from "connection": a manual
+// multi-city leg boundary (a chosen city to spend days in) is a different
+// concept from a same-flight layover, and from addStopoverMarker's
+// reserved (unbuilt) algorithmic-stopover-discovery role -- see
+// providers/base.py's FareSlice for the same distinction on the backend.
+export type MarkerRole = "origin" | "alternate-origin" | "connection" | "destination" | "city-stop";
 
 export interface MapMarker {
   id: string;

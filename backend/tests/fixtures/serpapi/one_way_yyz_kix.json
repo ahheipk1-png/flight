@@ -1,0 +1,59 @@
+{
+  "search_metadata": { "status": "Success" },
+  "best_flights": [
+    {
+      "flights": [
+        {
+          "departure_airport": { "name": "Toronto Pearson International Airport", "id": "YYZ", "time": "2026-09-18 13:35" },
+          "arrival_airport": { "name": "Incheon International Airport", "id": "ICN", "time": "2026-09-19 16:50" },
+          "duration": 855,
+          "airline": "Korean Air",
+          "airline_logo": "https://example.com/ke.png",
+          "flight_number": "KE 071",
+          "travel_class": "Economy"
+        },
+        {
+          "departure_airport": { "name": "Incheon International Airport", "id": "ICN", "time": "2026-09-19 18:40" },
+          "arrival_airport": { "name": "Kansai International Airport", "id": "KIX", "time": "2026-09-19 20:10" },
+          "duration": 90,
+          "airline": "Korean Air",
+          "airline_logo": "https://example.com/ke.png",
+          "flight_number": "KE 723",
+          "travel_class": "Economy"
+        }
+      ],
+      "layovers": [
+        { "duration": 110, "name": "Incheon International Airport", "id": "ICN" }
+      ],
+      "total_duration": 1055,
+      "price": 690,
+      "type": "One way",
+      "departure_token": "oneway123opaquetoken"
+    }
+  ],
+  "other_flights": [
+    {
+      "flights": [
+        {
+          "departure_airport": { "name": "Toronto Pearson International Airport", "id": "YYZ", "time": "2026-09-18 01:15" },
+          "arrival_airport": { "name": "Kansai International Airport", "id": "KIX", "time": "2026-09-19 05:40" },
+          "duration": 805,
+          "airline": "Turkish Airlines",
+          "airline_logo": "https://example.com/tk.png",
+          "flight_number": "TK 017",
+          "travel_class": "Economy"
+        }
+      ],
+      "layovers": [],
+      "total_duration": 805,
+      "price": 835,
+      "type": "One way",
+      "departure_token": "oneway456opaquetoken"
+    }
+  ],
+  "price_insights": {
+    "lowest_price": 690,
+    "price_level": "typical",
+    "typical_price_range": [650, 900]
+  }
+}

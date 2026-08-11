@@ -130,7 +130,9 @@ async def prune_and_expand(
                         if origin.iata in already_priced:
                             continue  # overlapping seed windows can revisit the same group
                         return_date = depart + dt.timedelta(days=trip_length)
-                        price, source = await estimate(session, origin.iata, dest_iata, depart, return_date)
+                        price, source = await estimate(
+                            session, origin.iata, dest_iata, depart, return_date, trip_type=space.trip_type
+                        )
                         group.candidates.append(
                             Candidate(
                                 origin=origin.iata, destination=dest_iata, depart_date=depart,

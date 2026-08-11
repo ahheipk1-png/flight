@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 
+import pytest
+from pydantic import ValidationError
+
 from app.schemas.search import SearchRequest
 from app.search.spaces import parse_request
 
@@ -44,3 +47,39 @@ async def test_destination_primaries_are_metro_primary_only(seeded_session):
 async def test_multiple_regions_union_destination_airports(seeded_session):
     space = await parse_request(seeded_session, _base_request(destination={"regions": ["taiwan", "hong_kong"]}))
     assert {a.iata for a in space.destination_airports} == {"TPE", "HKG"}
+
+
+async def test_trip_type_defaults_to_round_trip(seeded_session):
+    space = await parse_request(seeded_session, _base_request())
+    assert space.trip_type == "round_trip"
+
+
+async def test_trip_type_one_way_passes_through(seeded_session):
+    req = _base_request(
+        dates={"departure_from": dt.date(2026, 9, 1), "departure_to": dt.date(2026, 9, 10), "trip_length_min": 0, "trip_length_max": 0},
+        trip_type="one_way",
+    )
+    space = await parse_request(seeded_session, req)
+    assert space.trip_type == "one_way"
+    assert space.trip_length_min == 0
+    assert space.trip_length_max == 0
+
+
+def test_one_way_with_nonzero_trip_length_is_rejected():
+    # Server-side enforcement of the sentinel convention -- never trust
+    # the frontend alone to send trip_length 0/0 for a one-way request.
+    with pytest.raises(ValidationError):
+        _base_request(
+            dates={"departure_from": dt.date(2026, 9, 1), "departure_to": dt.date(2026, 9, 10), "trip_length_min": 5, "trip_length_max": 5},
+            trip_type="one_way",
+        )
+
+
+def test_round_trip_with_zero_trip_length_is_rejected():
+    # The 0/0 sentinel is reserved for one_way -- a round trip must not be
+    # able to collide with it.
+    with pytest.raises(ValidationError):
+        _base_request(
+            dates={"departure_from": dt.date(2026, 9, 1), "departure_to": dt.date(2026, 9, 10), "trip_length_min": 0, "trip_length_max": 0},
+            trip_type="round_trip",
+        )

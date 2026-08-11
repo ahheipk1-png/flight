@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.providers.base import FareQuery
-from app.providers.duffel import DuffelError, _parse_iso8601_duration_min, parse_response
+from app.providers.duffel import DuffelError, _parse_iso8601_duration_min, parse_multi_city_response, parse_response
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "duffel"
 
@@ -89,3 +89,61 @@ def test_missing_data_key_yields_no_options_not_a_crash():
 )
 def test_parse_iso8601_duration(value, expected_minutes):
     assert _parse_iso8601_duration_min(value) == expected_minutes
+
+
+# ---------- one-way ----------
+
+
+def test_one_way_reuses_parse_response_and_reads_the_single_slice():
+    # Duffel's one-way request sends exactly 1 slice, so _parse_offer's
+    # existing slices[0]-only read is already correct -- no new parsing
+    # path needed, just a new fixture with 1 slice per offer.
+    data = _load("one_way_yyz_kix.json")
+    options = parse_response(data, _query(trip_type="one_way"))
+
+    assert len(options) == 2
+    cheapest = options[0]
+    assert cheapest.price == 690.0
+    assert cheapest.stops == 1
+    assert cheapest.outbound_legs[0].from_iata == "YYZ"
+    assert cheapest.outbound_legs[-1].to_iata == "KIX"
+    assert cheapest.slices == ()
+
+
+def test_one_way_max_stops_filters_locally():
+    data = _load("one_way_yyz_kix.json")
+    options = parse_response(data, _query(trip_type="one_way", max_stops=0))
+    assert len(options) == 1
+    assert options[0].stops == 0
+
+
+# ---------- manual multi-city ----------
+
+
+def test_multi_city_parses_one_slice_per_requested_leg():
+    data = _load("multi_city_yyz_ist_bkk.json")
+    options = parse_multi_city_response(data, max_stops=None)
+
+    assert len(options) == 1
+    option = options[0]
+    assert option.price == 1420.0
+    assert len(option.slices) == 2
+    assert option.slices[0].legs[0].from_iata == "YYZ"
+    assert option.slices[0].legs[-1].to_iata == "IST"
+    assert option.slices[1].legs[0].from_iata == "IST"
+    assert option.slices[1].legs[-1].to_iata == "BKK"
+    # The multi-day gap between slices must never leak into layovers.
+    assert option.layovers == ()
+    assert option.stops == 0
+
+
+def test_multi_city_max_stops_filters_per_slice():
+    data = _load("multi_city_yyz_ist_bkk.json")
+    # Both slices are nonstop in the fixture, so max_stops=0 keeps it.
+    options = parse_multi_city_response(data, max_stops=0)
+    assert len(options) == 1
+
+
+def test_multi_city_error_payload_raises_duffel_error():
+    with pytest.raises(DuffelError):
+        parse_multi_city_response({"errors": [{"title": "Invalid token"}]}, max_stops=None)

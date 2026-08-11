@@ -12,6 +12,8 @@ import { CompleteState, PreloadCompleteIllustration, SearchingState } from "@/co
 import { useAuth } from "@/hooks/useAuth";
 import { useMeta } from "@/hooks/useMeta";
 import { useSearch } from "@/hooks/useSearch";
+import { useLocale } from "@/lib/i18n/LocaleContext";
+import type { SearchSubmission, TripType } from "@/lib/types";
 
 type View = "app" | "settings" | "admin";
 
@@ -20,18 +22,30 @@ export default function Home() {
   const { meta, error: metaError } = useMeta();
   const { uiState, stage, result, error, runSearch, reset } = useSearch();
   const [view, setView] = useState<View>("app");
+  // Captured at submit time rather than round-tripped through the backend:
+  // once trip_length_min/max can legitimately be 0 for either a one-way
+  // sentinel or a genuine same-day round trip, the response alone can't
+  // disambiguate which the results screen should render as -- the
+  // frontend already knows what it asked for, so it just remembers.
+  const [lastTripType, setLastTripType] = useState<TripType>("round_trip");
+  const { t } = useLocale();
+
+  function handleSearchSubmit(submission: SearchSubmission) {
+    setLastTripType(submission.tripType);
+    runSearch(submission, auth.token!);
+  }
 
   const headerRight = auth.token ? (
     <nav className="flex items-center gap-4 text-sm">
       <span className="text-slate-500">{auth.username}</span>
       {auth.status === "approved" && (
         <button type="button" onClick={() => setView("settings")} className="font-medium text-slate-600 hover:text-slate-900">
-          Settings
+          {t("nav.settings")}
         </button>
       )}
       {auth.isAdmin && (
         <button type="button" onClick={() => setView("admin")} className="font-medium text-slate-600 hover:text-slate-900">
-          🛠️ Admin
+          {t("nav.admin")}
         </button>
       )}
       <button
@@ -43,7 +57,7 @@ export default function Home() {
         }}
         className="font-medium text-slate-600 hover:text-slate-900"
       >
-        Log out
+        {t("nav.logout")}
       </button>
     </nav>
   ) : null;
@@ -62,13 +76,7 @@ export default function Home() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
         {!auth.token && (
           <div>
-            <div className="mx-auto mb-10 max-w-2xl text-center">
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Where could you go?</h1>
-              <p className="mt-3 text-slate-500">
-                Tell us your time, budget and travel preferences. SmartFlighter searches flexible dates, nearby
-                airports, safer connections and worthwhile stopovers for you.
-              </p>
-            </div>
+            <Hero />
             <AuthForms onRegister={auth.register} onLogin={auth.login} error={auth.error} clearError={auth.clearError} />
           </div>
         )}
@@ -80,9 +88,9 @@ export default function Home() {
         {auth.token && view === "settings" && (
           <div className="mx-auto max-w-md">
             <div className="mb-6 flex items-center justify-between">
-              <h1 className="text-xl font-bold text-slate-900">Settings</h1>
+              <h1 className="text-xl font-bold text-slate-900">{t("settings.title")}</h1>
               <button type="button" onClick={() => setView("app")} className="text-sm font-medium text-sky-600 hover:text-sky-700">
-                ← Back to search
+                {t("settings.back")}
               </button>
             </div>
             <ApiKeySettings hasApiKey={auth.hasApiKey} onSave={auth.saveApiKey} onClear={auth.removeApiKey} variant="settings" />
@@ -101,14 +109,8 @@ export default function Home() {
           <>
             {uiState === "idle" && (
               <div>
-                <div className="mx-auto mb-10 max-w-2xl text-center">
-                  <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Where could you go?</h1>
-                  <p className="mt-3 text-slate-500">
-                    Tell us your time, budget and travel preferences. SmartFlighter searches flexible dates, nearby
-                    airports, safer connections and worthwhile stopovers for you.
-                  </p>
-                </div>
-                <SearchForm meta={meta} metaError={metaError} onSubmit={(body) => runSearch(body, auth.token!)} />
+                <Hero />
+                <SearchForm meta={meta} metaError={metaError} onSubmit={handleSearchSubmit} />
               </div>
             )}
 
@@ -123,14 +125,14 @@ export default function Home() {
 
             {uiState === "error" && (
               <div className="mx-auto max-w-lg py-16 text-center">
-                <p className="text-lg font-semibold text-slate-800">Something went wrong.</p>
+                <p className="text-lg font-semibold text-slate-800">{t("error.title")}</p>
                 <p className="mt-1 text-sm text-slate-500">{error}</p>
                 <button
                   type="button"
                   onClick={reset}
                   className="mt-6 rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white"
                 >
-                  Try again
+                  {t("error.retry")}
                 </button>
               </div>
             )}
@@ -140,12 +142,23 @@ export default function Home() {
                 itineraries={result.itineraries}
                 degraded={result.degraded}
                 airports={meta?.airports ?? []}
+                tripType={lastTripType}
                 onEditSearch={reset}
               />
             )}
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function Hero() {
+  const { t } = useLocale();
+  return (
+    <div className="mx-auto mb-10 max-w-2xl text-center">
+      <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{t("home.heading")}</h1>
+      <p className="mt-3 text-slate-500">{t("home.subheading")}</p>
     </div>
   );
 }

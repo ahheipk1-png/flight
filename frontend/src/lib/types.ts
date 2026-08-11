@@ -15,6 +15,8 @@ export interface DestinationPrefs {
 export interface DatePrefs {
   departure_from: string; // ISO date
   departure_to: string;
+  // 0/0 is the one-way sentinel (see backend schemas/search.py) -- only
+  // valid when trip_type is "one_way", enforced server-side.
   trip_length_min: number;
   trip_length_max: number;
 }
@@ -30,6 +32,12 @@ export interface ConnectionPrefs {
   max_normal_minutes: number;
 }
 
+// Wire-level trip_type: only what SearchRequest itself carries. Manual
+// multi-city is a structurally different request (MultiCitySearchRequest
+// below), not a third value of this field -- see TripType for the
+// frontend-only UI state union that does include it.
+export type SearchTripType = "round_trip" | "one_way";
+
 export interface SearchRequestBody {
   origin: OriginPrefs;
   destination: DestinationPrefs;
@@ -37,7 +45,34 @@ export interface SearchRequestBody {
   budget: BudgetPrefs;
   connections: ConnectionPrefs;
   adults: number;
+  trip_type: SearchTripType;
 }
+
+export interface MultiCityLegPref {
+  destination: string; // IATA
+  date: string; // ISO date
+}
+
+// Deliberately separate from SearchRequestBody: no origin.max_ground_minutes/
+// min_saving_per_person (no nearby-airport-savings for manual multi-city)
+// and no destination.regions/dates window (every leg is explicit). Mirrors
+// backend schemas/search.py's MultiCitySearchRequest.
+export interface MultiCitySearchRequestBody {
+  legs: MultiCityLegPref[];
+  budget: BudgetPrefs;
+  connections: ConnectionPrefs;
+  adults: number;
+}
+
+// Frontend-only UI state union -- includes "multi_city", which has no
+// SearchTripType wire value of its own (it's a different endpoint/schema
+// entirely). SearchForm and useSearch both key off this to decide which
+// request shape/endpoint to submit.
+export type TripType = SearchTripType | "multi_city";
+
+export type SearchSubmission =
+  | { tripType: SearchTripType; body: SearchRequestBody }
+  | { tripType: "multi_city"; body: MultiCitySearchRequestBody };
 
 export interface AirportMeta {
   iata: string;
@@ -120,6 +155,10 @@ export interface ItineraryOut {
   carriers: string[];
   verified: boolean;
   ground_transfer: GroundTransferOut | null;
+  // Manual multi-city only: the intermediate leg endpoints in order (not
+  // including `destination`, the final leg's arrival). null for round
+  // trip/one-way.
+  city_stops: AirportRef[] | null;
   explanations: string[];
   rank_scores: { cheapest: number; fastest: number; best: number };
 }

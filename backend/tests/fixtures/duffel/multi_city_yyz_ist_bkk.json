@@ -1,0 +1,50 @@
+{
+  "data": {
+    "id": "orq_0000MultiCityAbCdEfGhIj",
+    "offers": [
+      {
+        "id": "off_0000MultiCityAbCdEfGh01",
+        "total_amount": "1420.00",
+        "total_currency": "CAD",
+        "slices": [
+          {
+            "id": "sli_leg1_01",
+            "duration": "PT11H30M",
+            "segments": [
+              {
+                "id": "seg_leg1_01a",
+                "origin": { "iata_code": "YYZ", "name": "Toronto Pearson International" },
+                "destination": { "iata_code": "IST", "name": "Istanbul Airport" },
+                "departing_at": "2026-09-10T18:00:00",
+                "arriving_at": "2026-09-11T11:30:00",
+                "duration": "PT10H30M",
+                "marketing_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "operating_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "marketing_carrier_flight_number": "017",
+                "operating_carrier_flight_number": "017"
+              }
+            ]
+          },
+          {
+            "id": "sli_leg2_01",
+            "duration": "PT10H15M",
+            "segments": [
+              {
+                "id": "seg_leg2_01a",
+                "origin": { "iata_code": "IST", "name": "Istanbul Airport" },
+                "destination": { "iata_code": "BKK", "name": "Suvarnabhumi Airport" },
+                "departing_at": "2026-09-15T02:00:00",
+                "arriving_at": "2026-09-15T14:45:00",
+                "duration": "PT9H45M",
+                "marketing_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "operating_carrier": { "iata_code": "TK", "name": "Turkish Airlines" },
+                "marketing_carrier_flight_number": "064",
+                "operating_carrier_flight_number": "064"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
