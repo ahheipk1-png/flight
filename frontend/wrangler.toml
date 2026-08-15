@@ -1,0 +1,9 @@
+name = "smartflighter"
+compatibility_date = "2026-08-01"
+
+# Pure static assets -- next.config.ts already sets output: "export", so
+# `npm run build` produces plain HTML/CSS/JS in out/ with no server-side
+# script needed. No `main` field: there is nothing to run, only files to
+# serve.
+[assets]
+directory = "./out"
