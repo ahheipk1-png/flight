@@ -124,6 +124,10 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
           </div>
         )}
 
+        {tab === "register" && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{t("apiKey.riskWarning")}</p>
+        )}
+
         {tab === "register" && <p className="text-xs text-slate-400">{t("auth.approvalNote")}</p>}
 
         {error && <p className="text-sm text-red-600">{error}</p>}

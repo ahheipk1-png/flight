@@ -30,6 +30,8 @@ export const en = {
   "apiKey.howToGetTitle": "How to get a free SerpApi key",
   "apiKey.howToGetSteps": "1. Sign up free at serpapi.com. 2. Open Dashboard → API Key. 3. Copy it and paste it below.",
   "apiKey.howToGetLink": "Open serpapi.com ↗",
+  "apiKey.riskWarning":
+    "Provide your key at your own risk: it is stored encrypted on the server, but no storage is theft-proof and the site admin can technically access it. Use a free-plan key with no billing attached.",
   "apiKey.savedNote": "A key is saved on your account.",
   "apiKey.replaceNote": "Paste a new one below to replace it.",
   "apiKey.savedJustNow": "Saved — you can search now.",
@@ -212,6 +214,8 @@ export const zhHant: Dictionary = {
   "apiKey.howToGetTitle": "如何免費取得 SerpApi 金鑰",
   "apiKey.howToGetSteps": "1. 到 serpapi.com 免費註冊。2. 進入 Dashboard → API Key 頁面。3. 複製金鑰並貼到下方欄位。",
   "apiKey.howToGetLink": "開啟 serpapi.com ↗",
+  "apiKey.riskWarning":
+    "請自行評估風險後再提供金鑰：金鑰會加密儲存在伺服器上，但沒有任何系統能保證絕不外洩，站長在技術上也能取得。建議使用未綁定付款方式的免費方案金鑰。",
   "apiKey.savedNote": "你的帳號已儲存一組金鑰。",
   "apiKey.replaceNote": "在下方貼上新金鑰即可取代原本的。",
   "apiKey.savedJustNow": "已儲存——現在可以開始搜尋了。",
@@ -391,6 +395,8 @@ export const zhHans: Dictionary = {
   "apiKey.howToGetTitle": "如何免费获取 SerpApi 密钥",
   "apiKey.howToGetSteps": "1. 到 serpapi.com 免费注册。2. 进入 Dashboard → API Key 页面。3. 复制密钥并粘贴到下方栏位。",
   "apiKey.howToGetLink": "打开 serpapi.com ↗",
+  "apiKey.riskWarning":
+    "请自行评估风险后再提供密钥：密钥会加密存储在服务器上，但没有任何系统能保证绝不泄露，站长在技术上也能获取。建议使用未绑定付款方式的免费方案密钥。",
   "apiKey.savedNote": "你的账号已保存一组密钥。",
   "apiKey.replaceNote": "在下方粘贴新密钥即可替换原来的。",
   "apiKey.savedJustNow": "已保存——现在可以开始搜索了。",

@@ -80,6 +80,10 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
         <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{t("apiKey.savedJustNow")}</p>
       )}
 
+      {/* Shown in BOTH variants: anywhere a key can be entered, the user
+          sees the store-at-your-own-risk terms first. */}
+      <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-left text-xs text-amber-800">{t("apiKey.riskWarning")}</p>
+
       <form onSubmit={handleSave} className="mt-4 space-y-3 text-left">
         <label className="block">
           <span className="mb-1 block text-sm text-slate-600">{t("apiKey.fieldLabel")}</span>
