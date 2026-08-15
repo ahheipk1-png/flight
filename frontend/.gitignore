@@ -32,6 +32,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...opting in for exactly one: .env.production holds only public URLs
+# (the Worker proxy and the map tile server), and committing it is what
+# stops a deploy silently falling back to localhost. Real secrets stay
+# ignored -- nothing sensitive belongs in a NEXT_PUBLIC_* var anyway,
+# since those are compiled into the browser bundle.
+!.env.production
 
 # vercel
 .vercel
