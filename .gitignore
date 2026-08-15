@@ -18,6 +18,9 @@ out/
 frontend/.env.local
 npm-debug.log*
 
+# --- Cloudflare Worker local dev state ---
+worker/.wrangler/
+
 # --- Env / secrets ---
 .env
 .env.*.local

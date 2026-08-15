@@ -4,100 +4,119 @@ Map-first flexible travel search. This is MVP 1 ("Prove Flexible Discovery")
 per [`Plan/SMARTFLIGHTER_FINAL_SPEC.md`](Plan/SMARTFLIGHTER_FINAL_SPEC.md)
 §51: flexible departure window + trip length, destination regions, the
 Toronto airport group with nearby-airport savings, map-first results,
-indicative fare discovery, live verification of finalists, and connection
-min/max filters.
+indicative fare discovery, live verification of finalists, connection
+min/max filters — plus (post-MVP-1 additions) round-trip/one-way/manual
+multi-city trip types and full Traditional Chinese / Simplified Chinese /
+English i18n.
+
+## Two modes: lightweight (deployed) vs. full backend
+
+**Lightweight — the deployed product.** The entire search pipeline runs
+in the visitor's browser (`frontend/src/lib/engine/`, a TS port of the
+Python pipeline, pinned to it by parity-golden tests); the only server is
+a ~100-line Cloudflare Worker (`worker/`) that forwards Google-Flights
+queries to SerpApi, because SerpApi deliberately blocks browser CORS.
+No accounts, no database, no Python at runtime:
+
+- Each visitor pastes **their own SerpApi key**, stored only in their own
+  browser's localStorage and sent per-request to the Worker (which
+  attaches it server-side and stores nothing). The literal key `demo`
+  runs everything against a built-in deterministic mock — full UI, zero
+  quota.
+- Fare history and the query cache are per-browser (localStorage): a
+  user's repeat searches are free and their estimates self-improve, but
+  there is no cross-user sharing the way the full backend has.
+- "Degraded to indicative" now means a live call failed (network/quota),
+  not site-budget exhaustion; the advisory usage counter tracks calls
+  against the user's own quota.
+- Hosting: Cloudflare Pages (static export) + one Worker — free tier for
+  both, no domain required (`*.pages.dev` / `*.workers.dev`).
+
+**Full backend — kept intact and green.** The FastAPI/SQLAlchemy backend
+(accounts with admin approval, encrypted per-user keys, shared
+cross-user fare history in Postgres/SQLite, Redis caching, budget
+guards) still lives in `backend/`, passes its full test suite, and
+remains deployable via [`render.yaml`](render.yaml). The old frontend
+wiring for it (login UI, HTTP polling) was removed from the deployed
+frontend but is one `git revert` away. Choose this mode if you want the
+approval gate or shared fare history back.
 
 ## Current environment status
 
-- **Node.js and Python are installed. Docker Desktop is installed but not
-  yet usable** — its install enabled WSL2/Virtual Machine Platform, which
-  need a Windows **reboot** to finish taking effect (`wsl --status` won't
-  work until then). Until you reboot and run `docker compose up -d`, the
-  backend runs against **SQLite** and an **in-process fake Redis** — same
-  code paths as the Postgres/Redis target, just swapped via `.env`. See
-  `.env.example` for both configurations.
-- **Every account brings its own SerpApi key — there is no shared/site-wide
-  fallback.** `SERPAPI_API_KEY` in `.env` only matters for the dev CLI's
-  `probe` command; it is never used to serve a real user's search. See
-  "Accounts" below before trying to actually use the site.
+- Node.js and Python are installed; Docker Desktop + WSL2 are installed
+  (post-reboot) if you want the full-backend mode's Postgres/Redis via
+  `docker compose up -d` — otherwise the backend's SQLite/fakeredis
+  fallback works with zero infra. The lightweight mode needs neither.
+- `SERPAPI_API_KEY` in `.env` only matters for the dev CLI's `probe`
+  command and the golden-dump script; it is never baked into the
+  frontend or the Worker.
 
 ## One-time setup
 
 ```bash
-# Backend
-cd backend
+# Frontend (lightweight mode -- this is the whole app)
+cd frontend
+npm install
+# frontend/.env.local:
+#   NEXT_PUBLIC_PROXY_BASE=http://localhost:8787
+#   NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
+
+# Backend (optional -- full-backend mode / running its tests)
+cd ../backend
 python -m venv .venv
 .venv\Scripts\pip install -e ".[dev]"        # Windows
 cp ../.env.example ../.env                    # first time only
-
-# Frontend
-cd ../frontend
-npm install
-# create frontend/.env.local:
-#   NEXT_PUBLIC_API_BASE=http://localhost:8000
-#   NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
 ```
 
-If you later bring up Docker (`docker compose up -d` from the repo root),
-edit `.env` and swap `DATABASE_URL`/`REDIS_URL` to the Postgres/Redis lines
-already commented in `.env.example`.
-
-## Running it
+## Running it (lightweight mode)
 
 ```bash
-# Terminal 1 -- backend
-cd backend
-.venv\Scripts\python -m app.cli seed      # idempotent; re-run anytime
-.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+# Terminal 1 -- the SerpApi proxy Worker
+cd worker
+npx wrangler dev          # serves http://localhost:8787, no login needed locally
 
 # Terminal 2 -- frontend
 cd frontend
 npm run dev
 ```
 
-Open http://localhost:3000. `GET http://localhost:8000/api/health` reports
-DB/Redis/provider status. You'll land on a login/request-account screen —
-see "Accounts" below to actually get in.
+Open http://localhost:3000. Paste a SerpApi key at the gate — or type
+`demo` to explore on the built-in mock with no key and no cost. Your key
+lives in your browser's localStorage only; **Settings** replaces or
+removes it. (The Worker is only contacted for real-key searches; demo
+mode never leaves the browser.)
 
-## Accounts
-
-No fallback: every search runs on the logged-in user's own SerpApi key,
-never a shared one — "it's their problem to use up their limits," not
-yours (see `app/api/deps.py:get_search_provider`). New accounts need
-admin approval before they can log in at all (no self-serve signup, no
-self-serve password reset — an admin sets a new password instead).
-
-**First time only** — bootstrap your own admin account:
-
-```bash
-cd backend
-.venv\Scripts\python -m app.cli make-admin YOUR_USERNAME
-```
-
-Prompts for a password (hidden input) and creates an already-approved
-admin account. Run it again with an existing username to just promote/
-approve that account instead (e.g. if you registered normally first).
-
-**Then:** log in at the site, click **🛠️ Admin** in the header, and
-approve/deny whoever else requests an account from there. Each approved
-user adds their own SerpApi key under **Settings** before they can search.
-
-This all depends on `API_KEY_ENCRYPTION_KEY` being set in `.env` (a real
-Fernet key — `.env.example` explains how to generate one). Startup fails
-loudly if it's missing. Never rotate it in a deployment that has real
-stored keys — every one of them becomes permanently undecryptable the
-moment the key changes.
+The old full-backend run instructions (uvicorn + seed + accounts +
+admin approval) still apply if you revert to that mode — see git history
+for the frontend wiring and "Deploying the full backend" below for the
+server side. `API_KEY_ENCRYPTION_KEY` and the `make-admin` bootstrap are
+full-backend-mode concepts only.
 
 ## Tests
 
 ```bash
-cd backend && .venv\Scripts\python -m pytest -q      # 73 tests
-cd frontend && npm test                                # 6 tests (vitest)
-cd frontend && npm run build                            # type-check + build
+cd backend && .venv\Scripts\python -m pytest -q      # 125 tests (Python pipeline)
+cd frontend && npm test                                # 27 tests (engine + parity goldens)
+cd frontend && npm run build                            # type-check + static export
 cd frontend && npm run lint
 ```
 
-## Going live with a real fare provider
+The frontend suite includes **parity goldens**: the TS engine's SerpApi
+parsers are asserted byte-identical to the Python parsers over the same
+recorded fixtures. Regenerate after changing either side:
+
+```bash
+backend\.venv\Scripts\python scripts\dump_parser_goldens.py
+```
+
+## Going live with a real fare provider (full-backend mode)
+
+Lightweight mode needs none of this — its live smoke is just: run
+`npx wrangler dev`, paste a real key in the UI, and run one narrow
+search (know-where + a single-airport region + know-when exact + "same
+airport" = exactly 1 SerpApi call; this was done once against a real
+response during development and the parser checked out). Everything
+below applies to the Python backend only.
 
 **SerpApi is the chosen provider for this project** — see "SerpApi" below.
 Two providers are supported either way, sharing one abstraction
@@ -167,43 +186,54 @@ response first).
 4. Once satisfied, restore `VERIFY_TOP_N=16` and the normal budget values
    (see `.env.example`) for real use.
 
-## Deploying (backend + Postgres + Redis on Render)
+## Deploying (lightweight mode — Cloudflare Pages + one Worker, $0)
 
-[`render.yaml`](render.yaml) is a Blueprint covering the backend web
-service, a Postgres database, and a Redis (Key Value) instance — no
-Dockerfile needed, Render's native Python runtime is used directly.
+Everything is free tier; no domain purchase needed (`*.pages.dev` and
+`*.workers.dev` URLs are permanent). A custom domain can be attached to
+both later without config changes.
 
-Cost reality, not just the free-tier headline: the web service and Redis
-are free indefinitely (Redis is 25MB, in-memory only, wiped on restart —
-fine here, since the app already tolerates that locally). **Postgres is
-only free for 30 days**, then either upgrade (~$6-7/mo) or it's deleted
-after a 14-day grace period.
+1. Create a free Cloudflare account.
+2. **Worker first** (from a machine with this repo):
+   ```bash
+   cd worker
+   npx wrangler login       # opens the browser for you to approve
+   npx wrangler deploy
+   ```
+   Note the printed `https://smartflighter-proxy.<you>.workers.dev` URL.
+3. **Pages**: Cloudflare dashboard → Workers & Pages → Create → Pages →
+   connect this GitHub repo. Settings: root directory `frontend`, build
+   command `npm run build`, output directory `out`. Add env var
+   `NEXT_PUBLIC_PROXY_BASE` = the Worker URL from step 2. Deploy → you
+   get `https://<project>.pages.dev`.
+4. Allow the Pages origin to call the Worker: edit
+   [`worker/wrangler.toml`](worker/wrangler.toml)'s `ALLOWED_ORIGINS`
+   to include the pages.dev origin, then `npx wrangler deploy` again.
+5. Share the pages.dev link. Each friend pastes their own SerpApi key
+   (or `demo` to look around first). No accounts, no approval step —
+   anyone with the link and a key can search, which is the accepted
+   tradeoff of this mode.
 
-1. Push this repo to GitHub (already done — `ahheipk1-png/flight`).
-2. On Render: **New → Blueprint**, point it at the repo. It reads
-   `render.yaml` and provisions all three resources.
-3. Render will prompt for the `sync: false` env vars during setup —
-   `API_KEY_ENCRYPTION_KEY` (**required**, see "Accounts" above),
-   `SERPAPI_API_KEY` (dev-CLI-only, optional), `DUFFEL_API_KEY`, and
-   `CORS_ORIGINS` (set to wherever the frontend ends up, e.g. a Vercel URL).
-   These are entered directly in Render's dashboard, never committed to
-   the repo.
-4. Migrations + seed run automatically as part of the build command (see
-   the comment in `render.yaml` for why — `preDeployCommand` needs a paid
-   plan, so this runs there instead; both steps are idempotent).
-5. Bootstrap your admin account the same way as local dev, just via
-   Render's web Shell tab instead of a local terminal:
-   `python -m app.cli make-admin YOUR_USERNAME` (from the `backend/`
-   directory the shell opens into).
-6. The frontend (Next.js) isn't part of this blueprint — Vercel is the
-   simpler fit for it (auto-detects Next.js, genuinely free, no prep
-   needed beyond setting `NEXT_PUBLIC_API_BASE` to the Render backend's
-   URL once it's up).
+The local dev proxy (`npx wrangler dev`) and the deployed Worker are the
+same code; the live smoke test in this repo's history validated the
+Worker + parsers against a real SerpApi response.
 
-I haven't run this deploy — I can't create the Render account myself
-(same reason I couldn't do the SerpApi signup earlier). The config is
-prepared and reasoned through, but **treat the first real deploy as
-unverified until it's actually been run once.**
+## Deploying the full backend instead (Render — optional alternative)
+
+[`render.yaml`](render.yaml) still provisions the FastAPI backend +
+Postgres + Redis (web service and Redis free indefinitely; **Postgres
+free for 30 days**, then ~$6-7/mo or deleted after a grace period).
+Steps: Render → New → Blueprint → this repo; enter the `sync: false`
+env vars it prompts for (`API_KEY_ENCRYPTION_KEY` required — generate
+fresh, never reuse the local one); migrations + seed run in the build
+command; bootstrap an admin via the Shell tab
+(`python -m app.cli make-admin YOUR_USERNAME`). Requires reverting the
+frontend to the backend-wired version (git history) and pointing
+`NEXT_PUBLIC_API_BASE` at the Render URL.
+
+Neither deploy has been run end-to-end from this machine — account
+creation and dashboard steps need a human; the configs are prepared and
+locally verified, but **treat the first real deploy as unverified until
+it's been run once.**
 
 ## Known issues / notes for whoever picks this up
 

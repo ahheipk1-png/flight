@@ -96,10 +96,10 @@ export function ItineraryDetails({ itinerary, tripType }: { itinerary: Itinerary
       <div className="mt-4 border-t border-slate-100 pt-4">
         <p className="mb-1.5 text-xs font-semibold tracking-wide text-slate-400 uppercase">{t("results.whyThisTrip")}</p>
         <ul className="space-y-1">
-          {itinerary.explanations.map((note) => (
-            <li key={note} className="flex gap-1.5 text-sm text-slate-600">
+          {itinerary.explanations.map((note, idx) => (
+            <li key={`${note.key}-${idx}`} className="flex gap-1.5 text-sm text-slate-600">
               <span className="text-emerald-600">✓</span>
-              <span>{note}</span>
+              <span>{t(note.key, note.params)}</span>
             </li>
           ))}
         </ul>

@@ -1,0 +1,18 @@
+[
+  { "a": "YYZ", "b": "YTZ", "ground_time_minutes": 45, "ground_cost_estimate": 30, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "YYZ", "b": "YHM", "ground_time_minutes": 70, "ground_cost_estimate": 35, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "YYZ", "b": "YKF", "ground_time_minutes": 60, "ground_cost_estimate": 30, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "YYZ", "b": "BUF", "ground_time_minutes": 150, "ground_cost_estimate": 60, "currency": "CAD", "same_metro": false, "same_travel_region": true },
+  { "a": "YTZ", "b": "YHM", "ground_time_minutes": 80, "ground_cost_estimate": 40, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "YTZ", "b": "YKF", "ground_time_minutes": 90, "ground_cost_estimate": 40, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "YTZ", "b": "BUF", "ground_time_minutes": 165, "ground_cost_estimate": 65, "currency": "CAD", "same_metro": false, "same_travel_region": true },
+  { "a": "YHM", "b": "YKF", "ground_time_minutes": 45, "ground_cost_estimate": 25, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "YHM", "b": "BUF", "ground_time_minutes": 100, "ground_cost_estimate": 45, "currency": "CAD", "same_metro": false, "same_travel_region": true },
+  { "a": "YKF", "b": "BUF", "ground_time_minutes": 130, "ground_cost_estimate": 55, "currency": "CAD", "same_metro": false, "same_travel_region": true },
+
+  { "a": "KIX", "b": "ITM", "ground_time_minutes": 80, "ground_cost_estimate": 25, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "KIX", "b": "UKB", "ground_time_minutes": 75, "ground_cost_estimate": 25, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+  { "a": "ITM", "b": "UKB", "ground_time_minutes": 50, "ground_cost_estimate": 20, "currency": "CAD", "same_metro": true, "same_travel_region": true },
+
+  { "a": "HND", "b": "NRT", "ground_time_minutes": 90, "ground_cost_estimate": 35, "currency": "CAD", "same_metro": true, "same_travel_region": true }
+]

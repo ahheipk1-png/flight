@@ -1,68 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import { AdminPage } from "@/components/admin/AdminPage";
-import { AccountStatusNotice } from "@/components/auth/AccountStatusNotice";
 import { ApiKeySettings } from "@/components/auth/ApiKeySettings";
-import { AuthForms } from "@/components/auth/AuthForms";
 import { BrandHeader } from "@/components/BrandHeader";
 import { ResultsLayout } from "@/components/results/ResultsLayout";
 import { SearchForm } from "@/components/search/SearchForm";
 import { CompleteState, PreloadCompleteIllustration, SearchingState } from "@/components/search/SearchStates";
-import { useAuth } from "@/hooks/useAuth";
+import { useApiKey } from "@/hooks/useApiKey";
 import { useMeta } from "@/hooks/useMeta";
 import { useSearch } from "@/hooks/useSearch";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import type { SearchSubmission, TripType } from "@/lib/types";
 
-type View = "app" | "settings" | "admin";
+type View = "app" | "settings";
 
 export default function Home() {
-  const auth = useAuth();
+  const keyState = useApiKey();
   const { meta, error: metaError } = useMeta();
   const { uiState, stage, result, error, runSearch, reset } = useSearch();
   const [view, setView] = useState<View>("app");
-  // Captured at submit time rather than round-tripped through the backend:
-  // once trip_length_min/max can legitimately be 0 for either a one-way
-  // sentinel or a genuine same-day round trip, the response alone can't
-  // disambiguate which the results screen should render as -- the
-  // frontend already knows what it asked for, so it just remembers.
+  // Captured at submit time: once trip_length_min/max can legitimately be
+  // 0 for either a one-way sentinel or a genuine same-day round trip, the
+  // result alone can't disambiguate which the results screen should
+  // render as -- the frontend already knows what it asked for.
   const [lastTripType, setLastTripType] = useState<TripType>("round_trip");
   const { t } = useLocale();
 
   function handleSearchSubmit(submission: SearchSubmission) {
     setLastTripType(submission.tripType);
-    runSearch(submission, auth.token!);
+    runSearch(submission, keyState.apiKey!);
   }
 
-  const headerRight = auth.token ? (
+  const headerRight = (
     <nav className="flex items-center gap-4 text-sm">
-      <span className="text-slate-500">{auth.username}</span>
-      {auth.status === "approved" && (
+      {keyState.isDemo && (
+        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+          {t("nav.demoBadge")}
+        </span>
+      )}
+      {keyState.hasApiKey && (
         <button type="button" onClick={() => setView("settings")} className="font-medium text-slate-600 hover:text-slate-900">
           {t("nav.settings")}
         </button>
       )}
-      {auth.isAdmin && (
-        <button type="button" onClick={() => setView("admin")} className="font-medium text-slate-600 hover:text-slate-900">
-          {t("nav.admin")}
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={() => {
-          setView("app");
-          reset();
-          auth.logout();
-        }}
-        className="font-medium text-slate-600 hover:text-slate-900"
-      >
-        {t("nav.logout")}
-      </button>
     </nav>
-  ) : null;
+  );
 
-  if (auth.loading) {
+  if (keyState.loading) {
     return (
       <div className="flex min-h-full flex-col">
         <BrandHeader />
@@ -74,18 +58,7 @@ export default function Home() {
     <div className="flex min-h-full flex-col">
       <BrandHeader right={headerRight} />
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
-        {!auth.token && (
-          <div>
-            <Hero />
-            <AuthForms onRegister={auth.register} onLogin={auth.login} error={auth.error} clearError={auth.clearError} />
-          </div>
-        )}
-
-        {auth.token && view === "admin" && auth.isAdmin && (
-          <AdminPage token={auth.token} currentUsername={auth.username ?? ""} onBack={() => setView("app")} />
-        )}
-
-        {auth.token && view === "settings" && (
+        {view === "settings" && (
           <div className="mx-auto max-w-md">
             <div className="mb-6 flex items-center justify-between">
               <h1 className="text-xl font-bold text-slate-900">{t("settings.title")}</h1>
@@ -93,19 +66,28 @@ export default function Home() {
                 {t("settings.back")}
               </button>
             </div>
-            <ApiKeySettings hasApiKey={auth.hasApiKey} onSave={auth.saveApiKey} onClear={auth.removeApiKey} variant="settings" />
+            <ApiKeySettings
+              hasApiKey={keyState.hasApiKey}
+              onSave={async (key) => keyState.saveApiKey(key)}
+              onClear={async () => keyState.removeApiKey()}
+              variant="settings"
+            />
           </div>
         )}
 
-        {auth.token && view === "app" && auth.status !== "approved" && auth.status !== null && (
-          <AccountStatusNotice status={auth.status} />
+        {view === "app" && !keyState.hasApiKey && (
+          <div>
+            <Hero />
+            <ApiKeySettings
+              hasApiKey={false}
+              onSave={async (key) => keyState.saveApiKey(key)}
+              onClear={async () => keyState.removeApiKey()}
+              variant="gate"
+            />
+          </div>
         )}
 
-        {auth.token && view === "app" && auth.status === "approved" && !auth.hasApiKey && (
-          <ApiKeySettings hasApiKey={auth.hasApiKey} onSave={auth.saveApiKey} onClear={auth.removeApiKey} variant="gate" />
-        )}
-
-        {auth.token && view === "app" && auth.status === "approved" && auth.hasApiKey && (
+        {view === "app" && keyState.hasApiKey && (
           <>
             {uiState === "idle" && (
               <div>
@@ -141,7 +123,7 @@ export default function Home() {
               <ResultsLayout
                 itineraries={result.itineraries}
                 degraded={result.degraded}
-                airports={meta?.airports ?? []}
+                airports={meta.airports}
                 tripType={lastTripType}
                 onEditSearch={reset}
               />

@@ -1,0 +1,10 @@
+{
+  "_comment": "Rough indicative CAD round-trip economy fare, per person, from the Toronto region's primary airport (YYZ) to each destination airport. Cold-start floor for services/indicative.py before any observations exist, and the base the mock provider scales from. Not real fares.",
+  "currency": "CAD",
+  "toronto": {
+    "HND": 1450, "NRT": 1380, "KIX": 1400, "ITM": 1420, "UKB": 1430,
+    "ICN": 1300, "TPE": 1250, "HKG": 1300, "SIN": 1450, "BKK": 1350,
+    "IST": 950, "DOH": 1150, "DXB": 1200,
+    "LHR": 750, "CDG": 780, "AMS": 800, "FRA": 820, "LIS": 820, "OPO": 850
+  }
+}

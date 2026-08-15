@@ -1,89 +1,82 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSearchState, postMultiCitySearch, postSearch } from "@/lib/api";
-import type { ItineraryOut, SearchStage, SearchSubmission } from "@/lib/types";
+import { MOCK_API_KEY, mockProvider } from "@/lib/engine/mock";
+import { EngineError, runFlexibleSearch, runMultiCitySearch, type SearchOutcome } from "@/lib/engine/pipeline";
+import { buildSerpApiProvider } from "@/lib/engine/serpapi";
+import { useLocale } from "@/lib/i18n/LocaleContext";
+import type { SearchStage, SearchSubmission } from "@/lib/types";
 
 export type UiState = "idle" | "searching" | "complete" | "results" | "error";
 
-const POLL_INTERVAL_MS = 700;
 const COMPLETE_HOLD_MS = 700;
 
-interface SearchResultState {
-  itineraries: ItineraryOut[];
-  degraded: boolean;
-  meta?: { candidate_count: number; candidate_group_count: number; coarse_count: number };
-}
-
+/**
+ * Same idle -> searching -> complete -> results state machine as before,
+ * but the search runs in-process now: the engine (src/lib/engine/) calls
+ * back with stage transitions directly instead of the old
+ * POST-then-poll-Redis loop against the Python backend.
+ */
 export function useSearch() {
+  const { t } = useLocale();
   const [uiState, setUiState] = useState<UiState>("idle");
   const [stage, setStage] = useState<SearchStage>("queued");
-  const [result, setResult] = useState<SearchResultState | null>(null);
+  const [result, setResult] = useState<SearchOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const pollAbortRef = useRef<AbortController | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const stopPolling = useCallback(() => {
-    pollAbortRef.current?.abort();
+  const stopSearch = useCallback(() => {
+    abortRef.current?.abort();
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
-  useEffect(() => stopPolling, [stopPolling]);
+  useEffect(() => stopSearch, [stopSearch]);
 
   const runSearch = useCallback(
-    async (submission: SearchSubmission, token: string) => {
-      stopPolling();
+    async (submission: SearchSubmission, apiKey: string) => {
+      stopSearch();
       setError(null);
       setResult(null);
       setStage("queued");
       setUiState("searching");
 
-      try {
-        const { search_id } =
-          submission.tripType === "multi_city"
-            ? await postMultiCitySearch(submission.body, token)
-            : await postSearch(submission.body, token);
-        const poll = async () => {
-          const controller = new AbortController();
-          pollAbortRef.current = controller;
-          try {
-            const state = await getSearchState(search_id, token, controller.signal);
-            setStage(state.stage);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const provider = apiKey === MOCK_API_KEY ? mockProvider : buildSerpApiProvider(apiKey);
+      const opts = { provider, onStage: setStage, signal: controller.signal };
 
-            if (state.status === "done") {
-              setResult({ itineraries: state.itineraries ?? [], degraded: state.degraded, meta: state.meta });
-              setUiState("complete");
-              timeoutRef.current = setTimeout(() => setUiState("results"), COMPLETE_HOLD_MS);
-              return;
-            }
-            if (state.status === "error") {
-              setError(state.error ?? "Search failed");
-              setUiState("error");
-              return;
-            }
-            timeoutRef.current = setTimeout(poll, POLL_INTERVAL_MS);
-          } catch (err) {
-            if (controller.signal.aborted) return;
-            setError(err instanceof Error ? err.message : "Search failed");
-            setUiState("error");
-          }
-        };
-        await poll();
+      try {
+        const outcome =
+          submission.tripType === "multi_city"
+            ? await runMultiCitySearch(submission.body, opts)
+            : await runFlexibleSearch(submission.body, opts);
+        if (controller.signal.aborted) return;
+        setStage("done");
+        setResult(outcome);
+        setUiState("complete");
+        timeoutRef.current = setTimeout(() => setUiState("results"), COMPLETE_HOLD_MS);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not start search");
+        if (controller.signal.aborted) return;
+        setStage("error");
+        if (err instanceof EngineError) {
+          setError(t(err.key, err.params));
+        } else {
+          setError(err instanceof Error ? err.message : "Search failed");
+        }
         setUiState("error");
       }
     },
-    [stopPolling],
+    [stopSearch, t],
   );
 
   const reset = useCallback(() => {
-    stopPolling();
+    stopSearch();
     setUiState("idle");
     setResult(null);
     setError(null);
-  }, [stopPolling]);
+  }, [stopSearch]);
 
   return { uiState, stage, result, error, runSearch, reset };
 }

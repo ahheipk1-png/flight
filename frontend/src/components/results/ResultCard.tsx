@@ -77,10 +77,10 @@ export function ResultCard({ itinerary, rank, tripType, selected, onSelect }: Re
 
       {itinerary.explanations.length > 0 && (
         <ul className="mt-3 space-y-1">
-          {itinerary.explanations.slice(0, 3).map((note) => (
-            <li key={note} className="flex gap-1.5 text-sm text-slate-600">
+          {itinerary.explanations.slice(0, 3).map((note, idx) => (
+            <li key={`${note.key}-${idx}`} className="flex gap-1.5 text-sm text-slate-600">
               <span className="text-emerald-600">✓</span>
-              <span>{note}</span>
+              <span>{t(note.key, note.params)}</span>
             </li>
           ))}
         </ul>

@@ -1,6 +1,10 @@
-// Mirrors backend/app/schemas/{search,itinerary,meta}.py exactly.
-// Keep field names identical to the Pydantic models -- this file has no
-// runtime logic, just the wire shape.
+// Shapes shared between the search form, the in-browser engine
+// (src/lib/engine/), and the results components. Historically these
+// mirrored backend/app/schemas/*.py 1:1 as wire types; the lightweight
+// build keeps the same field names so the Python backend remains a
+// drop-in alternative, but there is no HTTP wire in between anymore.
+
+import type { MessageKey } from "@/lib/i18n/messages";
 
 export interface OriginPrefs {
   region: string;
@@ -139,6 +143,15 @@ export interface GroundTransferOut {
 
 export type RankMode = "best" | "cheapest" | "fastest";
 
+// An untranslated explanation: the engine emits the i18n key + params and
+// the results components render it via t(), so explanations follow the
+// viewer's language (the server-rendered version could only ship English
+// strings here).
+export interface ExplanationSpec {
+  key: MessageKey;
+  params?: Record<string, string | number>;
+}
+
 export interface ItineraryOut {
   id: string;
   origin: AirportRef;
@@ -159,44 +172,8 @@ export interface ItineraryOut {
   // including `destination`, the final leg's arrival). null for round
   // trip/one-way.
   city_stops: AirportRef[] | null;
-  explanations: string[];
+  explanations: ExplanationSpec[];
   rank_scores: { cheapest: number; fastest: number; best: number };
 }
 
 export type SearchStage = "queued" | "generating" | "pruning" | "verifying" | "ranking" | "done" | "error";
-
-export interface SearchStateResponse {
-  status: "running" | "done" | "error";
-  stage: SearchStage;
-  degraded: boolean;
-  itineraries: ItineraryOut[] | null;
-  meta?: { candidate_count: number; candidate_group_count: number; coarse_count: number };
-  error?: string;
-}
-
-// Mirrors backend/app/schemas/auth.py exactly.
-
-export type AccountStatus = "pending" | "approved" | "denied" | "disabled";
-
-export interface SessionOut {
-  token: string;
-  username: string;
-  is_admin: boolean;
-}
-
-export interface MeOut {
-  username: string;
-  status: AccountStatus;
-  is_admin: boolean;
-  has_api_key: boolean;
-}
-
-export interface AdminAccountOut {
-  id: number;
-  username: string;
-  status: AccountStatus;
-  is_admin: boolean;
-  has_api_key: boolean;
-  created_at: string;
-  decided_at: string | null;
-}

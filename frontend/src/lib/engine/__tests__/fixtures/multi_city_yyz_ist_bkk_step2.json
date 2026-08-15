@@ -1,0 +1,43 @@
+{
+  "search_metadata": { "status": "Success" },
+  "search_parameters": {
+    "type": "3",
+    "departure_token": "opaque-step1-token-abc",
+    "multi_city_json": "[{\"departure_id\": \"YYZ\", \"arrival_id\": \"IST\", \"date\": \"2026-09-10\"}, {\"departure_id\": \"IST\", \"arrival_id\": \"BKK\", \"date\": \"2026-09-15\"}]"
+  },
+  "best_flights": [],
+  "other_flights": [
+    {
+      "flights": [
+        {
+          "departure_airport": { "name": "Istanbul Airport", "id": "IST", "time": "2026-09-15 02:00" },
+          "arrival_airport": { "name": "Suvarnabhumi Airport", "id": "BKK", "time": "2026-09-15 14:45" },
+          "duration": 565,
+          "airline": "Turkish Airlines",
+          "flight_number": "TK 64",
+          "travel_class": "Economy"
+        }
+      ],
+      "total_duration": 565,
+      "price": 1789,
+      "type": "Multi-city",
+      "booking_token": "opaque-booking-token-xyz"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": { "name": "Istanbul Airport", "id": "IST", "time": "2026-09-15 20:15" },
+          "arrival_airport": { "name": "Suvarnabhumi Airport", "id": "BKK", "time": "2026-09-16 09:40" },
+          "duration": 565,
+          "airline": "Turkish Airlines",
+          "flight_number": "TK 68",
+          "travel_class": "Economy"
+        }
+      ],
+      "total_duration": 565,
+      "price": 1789,
+      "type": "Multi-city",
+      "booking_token": "opaque-booking-token-uvw"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "price": 690.0,
+    "currency": "CAD",
+    "outbound_legs": [
+      {
+        "from_iata": "YYZ",
+        "to_iata": "ICN",
+        "dep_time": "2026-09-18T13:35",
+        "arr_time": "2026-09-19T16:50",
+        "carrier": "KE",
+        "flight_number": "KE 071",
+        "duration_min": 855
+      },
+      {
+        "from_iata": "ICN",
+        "to_iata": "KIX",
+        "dep_time": "2026-09-19T18:40",
+        "arr_time": "2026-09-19T20:10",
+        "carrier": "KE",
+        "flight_number": "KE 723",
+        "duration_min": 90
+      }
+    ],
+    "layovers": [
+      [
+        "ICN",
+        110
+      ]
+    ],
+    "total_duration_min": 1055,
+    "stops": 1,
+    "carriers": [
+      "KE"
+    ],
+    "inbound_detail": "indicative",
+    "slices": []
+  },
+  {
+    "price": 835.0,
+    "currency": "CAD",
+    "outbound_legs": [
+      {
+        "from_iata": "YYZ",
+        "to_iata": "KIX",
+        "dep_time": "2026-09-18T01:15",
+        "arr_time": "2026-09-19T05:40",
+        "carrier": "TK",
+        "flight_number": "TK 017",
+        "duration_min": 805
+      }
+    ],
+    "layovers": [],
+    "total_duration_min": 805,
+    "stops": 0,
+    "carriers": [
+      "TK"
+    ],
+    "inbound_detail": "indicative",
+    "slices": []
+  }
+]

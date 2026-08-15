@@ -1,0 +1,42 @@
+{
+  "search_metadata": { "status": "Success" },
+  "search_parameters": {
+    "type": "3",
+    "multi_city_json": "[{\"departure_id\": \"YYZ\", \"arrival_id\": \"IST\", \"date\": \"2026-09-10\"}, {\"departure_id\": \"IST\", \"arrival_id\": \"BKK\", \"date\": \"2026-09-15\"}]"
+  },
+  "best_flights": [
+    {
+      "flights": [
+        {
+          "departure_airport": { "name": "Toronto Pearson International Airport", "id": "YYZ", "time": "2026-09-10 21:00" },
+          "arrival_airport": { "name": "Istanbul Airport", "id": "IST", "time": "2026-09-11 14:00" },
+          "duration": 600,
+          "airline": "Air Transat",
+          "flight_number": "TS 214",
+          "travel_class": "Economy"
+        }
+      ],
+      "total_duration": 600,
+      "price": 1789,
+      "type": "Multi-city",
+      "departure_token": "opaque-step1-token-abc"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": { "name": "Toronto Pearson International Airport", "id": "YYZ", "time": "2026-09-10 22:00" },
+          "arrival_airport": { "name": "Istanbul Airport", "id": "IST", "time": "2026-09-11 14:50" },
+          "duration": 590,
+          "airline": "Turkish Airlines",
+          "flight_number": "TK 18",
+          "travel_class": "Economy"
+        }
+      ],
+      "total_duration": 590,
+      "price": 1899,
+      "type": "Multi-city",
+      "departure_token": "opaque-step1-token-def"
+    }
+  ],
+  "other_flights": []
+}

@@ -24,7 +24,7 @@ services:
           type: keyvalue
           property: connectionString
       - key: CORS_ORIGINS
-        sync: false # set to your deployed frontend URL, e.g. https://smartflighter.vercel.app
+        sync: false # set to your deployed frontend URL, e.g. https://app.yourdomain.com (Cloudflare Pages)
       - key: DEFAULT_CURRENCY
         value: CAD
       - key: API_KEY_ENCRYPTION_KEY

@@ -1,22 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getMeta } from "@/lib/api";
+import { META } from "@/lib/engine/seed";
 import type { MetaResponse } from "@/lib/types";
 
-export function useMeta() {
-  const [meta, setMeta] = useState<MetaResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getMeta(controller.signal)
-      .then(setMeta)
-      .catch((err) => {
-        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Could not load airports");
-      });
-    return () => controller.abort();
-  }, []);
-
-  return { meta, error };
+/**
+ * Airports/regions/metros now ship with the bundle (engine seed data)
+ * instead of coming from GET /api/meta. The {meta, error} shape is kept
+ * so SearchForm and the results screen are untouched; error is always
+ * null because there is nothing left to fail.
+ */
+export function useMeta(): { meta: MetaResponse; error: string | null } {
+  return { meta: META, error: null };
 }
