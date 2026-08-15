@@ -2,8 +2,7 @@ name = "smartflighter-proxy"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
-# Comma-separated list of origins allowed to call this proxy. Add your
-# *.pages.dev origin (and any custom domain) after the first Pages deploy,
-# then `npx wrangler deploy` again.
+# Comma-separated list of origins allowed to call this proxy. Add any
+# custom domain here later, then `npx wrangler deploy` again.
 [vars]
-ALLOWED_ORIGINS = "http://localhost:3000"
+ALLOWED_ORIGINS = "http://localhost:3000,https://smartflighter.ahheipk1.workers.dev"
