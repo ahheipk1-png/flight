@@ -56,6 +56,19 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
           <h2 className="text-lg font-semibold text-slate-800">{t("apiKey.gateTitle")}</h2>
           <p className="mt-1 text-sm text-slate-500">{t("apiKey.gateSubtitle")}</p>
           <p className="mt-2 text-xs text-slate-400">{t("apiKey.demoHint")}</p>
+
+          <div className="mt-4 rounded-lg bg-slate-50 p-3 text-left">
+            <p className="text-xs font-semibold text-slate-600">{t("apiKey.howToGetTitle")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t("apiKey.howToGetSteps")}</p>
+            <a
+              href="https://serpapi.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-block text-xs font-medium text-sky-600 hover:text-sky-700"
+            >
+              {t("apiKey.howToGetLink")}
+            </a>
+          </div>
         </>
       )}
 

@@ -255,12 +255,15 @@ it's been run once.**
 - Brand assets: the three source PNGs in `Plan/` are not transparent as
   the spec assumes (dark vignette on the logo, soft gradients on the
   illustrations). `scripts/process_assets.py` ships the two illustrations
-  as-is (inside a card, per the spec's own fallback) and draws a small
-  clean paper-plane mark programmatically for the header/favicon rather
-  than fighting a real background-vs-highlight color conflict in the
-  source art with flood-fill extraction (that attempt is described in the
-  script's docstring). Re-run `scripts/process_assets.py` (via its own
-  venv, `scripts/.assets-venv`) if source assets change.
+  as-is (inside a card, per the spec's own fallback) and extracts the
+  plane mascot for the header/favicon with `rembg` (a trained
+  salient-object segmenter — a plain color-distance flood-fill was tried
+  first and rejected, since the background gradient overlaps the
+  character's own highlights; see the script's docstring). Re-run
+  `scripts/process_assets.py` (via its own venv, `scripts/.assets-venv`;
+  `pip install -r scripts/requirements-assets.txt` first if the venv is
+  new) if source assets change, then LOOK at the output before trusting
+  it, per the script's own docstring.
 - Two minor spec self-inconsistencies noted during planning, resolved in
   favor of §17/§31's own numeric definitions: §34's example calls a $112
   stopover "FREE CITY" though §17 caps that tier at $0 (GOOD VALUE is the
