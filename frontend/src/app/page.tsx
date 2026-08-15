@@ -1,21 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import { AdminPage } from "@/components/admin/AdminPage";
+import { AccountMenu } from "@/components/auth/AccountMenu";
+import { AccountStatusNotice } from "@/components/auth/AccountStatusNotice";
 import { ApiKeySettings } from "@/components/auth/ApiKeySettings";
+import { AuthForms } from "@/components/auth/AuthForms";
 import { BrandHeader } from "@/components/BrandHeader";
 import { ResultsLayout } from "@/components/results/ResultsLayout";
 import { SearchForm } from "@/components/search/SearchForm";
 import { CompleteState, PreloadCompleteIllustration, SearchingState } from "@/components/search/SearchStates";
-import { useApiKey } from "@/hooks/useApiKey";
+import { useAuth } from "@/hooks/useAuth";
 import { useMeta } from "@/hooks/useMeta";
 import { useSearch } from "@/hooks/useSearch";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import type { SearchSubmission, TripType } from "@/lib/types";
 
-type View = "app" | "settings";
+type View = "app" | "settings" | "admin";
 
 export default function Home() {
-  const keyState = useApiKey();
+  const auth = useAuth();
   const { meta, error: metaError } = useMeta();
   const { uiState, stage, result, error, runSearch, reset } = useSearch();
   const [view, setView] = useState<View>("app");
@@ -28,25 +32,28 @@ export default function Home() {
 
   function handleSearchSubmit(submission: SearchSubmission) {
     setLastTripType(submission.tripType);
-    runSearch(submission, keyState.apiKey!);
+    // The session token -- the Worker resolves it to this user's own
+    // stored SerpApi key server-side; the key never reaches the browser.
+    runSearch(submission, auth.token!);
   }
 
-  const headerRight = (
-    <nav className="flex items-center gap-4 text-sm">
-      {keyState.isDemo && (
-        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-          {t("nav.demoBadge")}
-        </span>
-      )}
-      {keyState.hasApiKey && (
-        <button type="button" onClick={() => setView("settings")} className="font-medium text-slate-600 hover:text-slate-900">
-          {t("nav.settings")}
-        </button>
-      )}
-    </nav>
-  );
+  const headerRight =
+    auth.token && auth.username ? (
+      <AccountMenu
+        username={auth.username}
+        status={auth.status}
+        isAdmin={auth.isAdmin}
+        onOpenSettings={() => setView("settings")}
+        onOpenAdmin={() => setView("admin")}
+        onLogout={() => {
+          setView("app");
+          reset();
+          auth.logout();
+        }}
+      />
+    ) : null;
 
-  if (keyState.loading) {
+  if (auth.loading) {
     return (
       <div className="flex min-h-full flex-col">
         <BrandHeader />
@@ -58,7 +65,18 @@ export default function Home() {
     <div className="flex min-h-full flex-col">
       <BrandHeader right={headerRight} />
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
-        {view === "settings" && (
+        {!auth.token && (
+          <div>
+            <Hero />
+            <AuthForms onRegister={auth.register} onLogin={auth.login} error={auth.error} clearError={auth.clearError} />
+          </div>
+        )}
+
+        {auth.token && view === "admin" && auth.isAdmin && (
+          <AdminPage token={auth.token} currentUsername={auth.username ?? ""} onBack={() => setView("app")} />
+        )}
+
+        {auth.token && view === "settings" && (
           <div className="mx-auto max-w-md">
             <div className="mb-6 flex items-center justify-between">
               <h1 className="text-xl font-bold text-slate-900">{t("settings.title")}</h1>
@@ -66,28 +84,19 @@ export default function Home() {
                 {t("settings.back")}
               </button>
             </div>
-            <ApiKeySettings
-              hasApiKey={keyState.hasApiKey}
-              onSave={async (key) => keyState.saveApiKey(key)}
-              onClear={async () => keyState.removeApiKey()}
-              variant="settings"
-            />
+            <ApiKeySettings hasApiKey={auth.hasApiKey} onSave={auth.saveApiKey} onClear={auth.removeApiKey} variant="settings" />
           </div>
         )}
 
-        {view === "app" && !keyState.hasApiKey && (
-          <div>
-            <Hero />
-            <ApiKeySettings
-              hasApiKey={false}
-              onSave={async (key) => keyState.saveApiKey(key)}
-              onClear={async () => keyState.removeApiKey()}
-              variant="gate"
-            />
-          </div>
+        {auth.token && view === "app" && auth.status !== "approved" && auth.status !== null && (
+          <AccountStatusNotice status={auth.status} />
         )}
 
-        {view === "app" && keyState.hasApiKey && (
+        {auth.token && view === "app" && auth.status === "approved" && !auth.hasApiKey && (
+          <ApiKeySettings hasApiKey={auth.hasApiKey} onSave={auth.saveApiKey} onClear={auth.removeApiKey} variant="gate" />
+        )}
+
+        {auth.token && view === "app" && auth.status === "approved" && auth.hasApiKey && (
           <>
             {uiState === "idle" && (
               <div>

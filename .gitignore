@@ -20,6 +20,9 @@ npm-debug.log*
 
 # --- Cloudflare Worker local dev state ---
 worker/.wrangler/
+# Local dev secrets (wrangler's .env equivalent) -- production uses
+# `wrangler secret put`, never a committed file.
+worker/.dev.vars
 
 # --- Env / secrets ---
 .env

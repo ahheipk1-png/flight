@@ -30,6 +30,20 @@ export class ProxyError extends Error {
   }
 }
 
+/** The Worker's own account gates rejected this (not approved, no key,
+ * session expired...). Distinguished from SerpApiError by the "source":
+ * "auth" marker the Worker sets, because unlike a fare-provider failure
+ * this must NOT silently degrade to indicative pricing -- it needs to
+ * reach the user as an account problem they can act on. */
+export class AuthGateError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
 function carrierCode(flightNumber: string | null | undefined, airline: string | null | undefined): string {
   if (flightNumber) {
     const prefix = flightNumber.trim().split(" ")[0];
@@ -201,14 +215,17 @@ export function buildMultiCityOption(
 
 async function proxyFetch(
   params: Record<string, string | number>,
-  apiKey: string,
+  token: string,
   signal?: AbortSignal,
 ): Promise<RawResponse> {
   let res: Response;
   try {
     res = await fetch(`${PROXY_BASE}/search`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Serpapi-Key": apiKey },
+      // The session token, not a key: the Worker looks up this user's own
+      // stored SerpApi key and attaches it server-side, so the key never
+      // reaches the browser.
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ params }),
       signal,
     });
@@ -223,10 +240,13 @@ async function proxyFetch(
     throw new ProxyError(`Proxy returned non-JSON (HTTP ${res.status})`, res.status);
   }
   if (!res.ok) {
+    const body = data as { error?: unknown; source?: unknown };
+    // The Worker marks its own account-gate rejections with source:"auth"
+    // so they don't get mistaken for a SerpApi failure and degraded away.
+    if (body.source === "auth") throw new AuthGateError(String(body.error ?? `HTTP ${res.status}`), res.status);
     // SerpApi's own {"error": ...} body passes through with its status --
     // surface it as SerpApiError so quota/auth problems read correctly.
-    const detail = (data as { error?: unknown }).error;
-    if (detail !== undefined) throw new SerpApiError(String(detail));
+    if (body.error !== undefined) throw new SerpApiError(String(body.error));
     throw new ProxyError(`HTTP ${res.status}`, res.status);
   }
   return data as RawResponse;
@@ -276,17 +296,19 @@ function multiCityParams(legs: MultiCityLeg[], adults: number, currency: string)
   };
 }
 
-export function buildSerpApiProvider(apiKey: string): EngineProvider {
+/** `sessionToken` is the user's login session, not a SerpApi key -- the
+ * Worker resolves it to that user's own stored key server-side. */
+export function buildSerpApiProvider(sessionToken: string): EngineProvider {
   return {
     name: "serpapi",
 
     async searchRoundTrip(query, signal) {
-      const data = await proxyFetch(roundTripParams(query), apiKey, signal);
+      const data = await proxyFetch(roundTripParams(query), sessionToken, signal);
       return parseResponse(data, query);
     },
 
     async searchOneWay(query, signal) {
-      const data = await proxyFetch(oneWayParams(query), apiKey, signal);
+      const data = await proxyFetch(oneWayParams(query), sessionToken, signal);
       return parseResponse(data, query);
     },
 
@@ -296,21 +318,21 @@ export function buildSerpApiProvider(apiKey: string): EngineProvider {
       // the Python module's docstring for the live-verified evidence and
       // its explicitly unproven >2-leg generalization).
       const baseParams = multiCityParams(legs, opts.adults, opts.currency);
-      let data = await proxyFetch(baseParams, apiKey, signal);
+      let data = await proxyFetch(baseParams, sessionToken, signal);
       let chosen = cheapestMultiCityStep(data);
       if (chosen === null) return [];
       let collectedLegs = (chosen.flights ?? []).map(parseLeg);
       let price = chosen.price;
-      let token = chosen.departure_token;
+      let departureToken = chosen.departure_token;
 
       for (let i = 0; i < legs.length - 1; i++) {
-        if (!token) return []; // chain ended early -- no result rather than an incomplete one
-        data = await proxyFetch({ ...baseParams, departure_token: token }, apiKey, signal);
+        if (!departureToken) return []; // chain ended early -- no result rather than an incomplete one
+        data = await proxyFetch({ ...baseParams, departure_token: departureToken }, sessionToken, signal);
         chosen = cheapestMultiCityStep(data);
         if (chosen === null) return [];
         collectedLegs = [...collectedLegs, ...(chosen.flights ?? []).map(parseLeg)];
         price = chosen.price;
-        token = chosen.departure_token;
+        departureToken = chosen.departure_token;
       }
 
       if (price === null || price === undefined) return [];

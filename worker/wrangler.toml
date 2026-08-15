@@ -6,3 +6,23 @@ compatibility_date = "2026-08-01"
 # custom domain here later, then `npx wrangler deploy` again.
 [vars]
 ALLOWED_ORIGINS = "http://localhost:3000,https://smartflighter.ahheipk1.workers.dev"
+
+# The value is a secret (never in this committed file): local dev reads
+# it from .dev.vars (gitignored), production from
+# `wrangler secret put API_KEY_ENCRYPTION_KEY`. Declaring it here is what
+# lets wrangler dev load it from .dev.vars and makes deploys warn if the
+# production secret is missing.
+[secrets]
+required = ["API_KEY_ENCRYPTION_KEY"]
+
+# Accounts, sessions, and each user's encrypted SerpApi key.
+[[d1_databases]]
+binding = "DB"
+database_name = "smartflighter-db"
+database_id = "1228ae9a-46df-403e-8df7-223b18aeb1e9"
+migrations_dir = "migrations"
+
+# Housekeeping only: expiry is enforced by checking expires_at on every
+# session lookup, so a missed sweep can never authenticate a stale token.
+[triggers]
+crons = ["0 3 * * *"]

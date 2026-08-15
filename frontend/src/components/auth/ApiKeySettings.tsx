@@ -55,7 +55,6 @@ export function ApiKeySettings({ hasApiKey, onSave, onClear, variant = "settings
         <>
           <h2 className="text-lg font-semibold text-slate-800">{t("apiKey.gateTitle")}</h2>
           <p className="mt-1 text-sm text-slate-500">{t("apiKey.gateSubtitle")}</p>
-          <p className="mt-2 text-xs text-slate-400">{t("apiKey.demoHint")}</p>
 
           <div className="mt-4 rounded-lg bg-slate-50 p-3 text-left">
             <p className="text-xs font-semibold text-slate-600">{t("apiKey.howToGetTitle")}</p>

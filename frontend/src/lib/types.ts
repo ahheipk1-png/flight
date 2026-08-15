@@ -177,3 +177,45 @@ export interface ItineraryOut {
 }
 
 export type SearchStage = "queued" | "generating" | "pruning" | "verifying" | "ranking" | "done" | "error";
+
+// Mirrors the Worker's account shapes (worker/src/routes/{auth,admin}.ts).
+
+export type AccountStatus = "pending" | "approved" | "denied" | "disabled";
+
+export interface SessionOut {
+  token: string;
+  username: string;
+  is_admin: boolean;
+}
+
+export interface MeOut {
+  username: string;
+  status: AccountStatus;
+  is_admin: boolean;
+  has_api_key: boolean;
+}
+
+export interface AdminAccountOut {
+  id: number;
+  username: string;
+  status: AccountStatus;
+  is_admin: boolean;
+  has_api_key: boolean;
+  created_at: string;
+  decided_at: string | null;
+  // Paid SerpApi calls within the log's 90-day retention window -- one
+  // UI search fans out into several of these.
+  search_count: number;
+}
+
+/** One proxied (paid) SerpApi call, as shown in the admin history panel.
+ * trip_type is SerpApi's coding: "1" round trip, "2" one-way, "3" multi-city. */
+export interface SearchLogEntry {
+  id: number;
+  trip_type: string | null;
+  departure_id: string | null;
+  arrival_id: string | null;
+  outbound_date: string | null;
+  return_date: string | null;
+  created_at: string;
+}

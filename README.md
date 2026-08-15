@@ -13,24 +13,37 @@ English i18n.
 
 **Lightweight — the deployed product.** The entire search pipeline runs
 in the visitor's browser (`frontend/src/lib/engine/`, a TS port of the
-Python pipeline, pinned to it by parity-golden tests); the only server is
-a ~100-line Cloudflare Worker (`worker/`) that forwards Google-Flights
-queries to SerpApi, because SerpApi deliberately blocks browser CORS.
-No accounts, no database, no Python at runtime:
+Python pipeline, pinned to it by parity-golden tests); the server is one
+Cloudflare Worker (`worker/`) with two jobs: **accounts on D1** and the
+**SerpApi proxy** (SerpApi deliberately blocks browser CORS). No Python
+at runtime, still $0 hosting (D1 is on the Workers free tier):
 
-- Each visitor pastes **their own SerpApi key**, stored only in their own
-  browser's localStorage and sent per-request to the Worker (which
-  attaches it server-side and stores nothing). The literal key `demo`
-  runs everything against a built-in deterministic mock — full UI, zero
-  quota.
-- Fare history and the query cache are per-browser (localStorage): a
-  user's repeat searches are free and their estimates self-improve, but
-  there is no cross-user sharing the way the full backend has.
-- "Degraded to indicative" now means a live call failed (network/quota),
-  not site-budget exhaustion; the advisory usage counter tracks calls
-  against the user's own quota.
-- Hosting: Cloudflare Pages (static export) + one Worker — free tier for
-  both, no domain required (`*.pages.dev` / `*.workers.dev`).
+- **Accounts with admin approval**: request an account (supplying your
+  own SerpApi key at signup — there is no shared key), an admin approves
+  it, then you can search. The key is stored server-side encrypted
+  (AES-GCM; `API_KEY_ENCRYPTION_KEY` Worker secret) and is editable
+  later from the account menu's Settings. Passwords are PBKDF2-hashed
+  (100k iterations — workerd's hard cap, documented in
+  `worker/src/lib/crypto.ts`). Sessions are 30-day bearer tokens in D1.
+- **Admin dashboard** (account menu → Admin): approve/deny/disable,
+  set a user's password, set/remove a user's API key, and per-user
+  usage — API-call counts (90-day window) and a per-account search
+  history, logged by the Worker per proxied (paid) SerpApi call.
+- Searches send the session token; the Worker decrypts that user's own
+  key server-side and attaches it — the key never reaches the browser,
+  and the old client-supplied-key path is gone (it would bypass the
+  approval gate).
+- Fare history and the query cache remain per-browser (localStorage);
+  "degraded to indicative" means a live call failed (bad key, quota,
+  network).
+- Hosting: Cloudflare Pages/Workers static frontend + the one Worker —
+  free tier for both, no domain required.
+- First admin: `cd worker && npm run make-admin -- <username>` (add
+  `--local` for the dev database) — registration alone can never mint
+  an admin.
+- Local dev: `worker/.dev.vars` (gitignored) holds the dev encryption
+  key; `[secrets] required` in `wrangler.toml` is what makes wrangler
+  load it and makes deploys warn if the production secret is missing.
 
 **Full backend — kept intact and green.** The FastAPI/SQLAlchemy backend
 (accounts with admin approval, encrypted per-user keys, shared
@@ -97,6 +110,7 @@ full-backend-mode concepts only.
 ```bash
 cd backend && .venv\Scripts\python -m pytest -q      # 125 tests (Python pipeline)
 cd frontend && npm test                                # 27 tests (engine + parity goldens)
+cd worker && npm test                                   # 41 tests (crypto, auth gating, admin dashboard)
 cd frontend && npm run build                            # type-check + static export
 cd frontend && npm run lint
 ```

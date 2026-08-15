@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MOCK_API_KEY, mockProvider } from "@/lib/engine/mock";
 import { EngineError, runFlexibleSearch, runMultiCitySearch, type SearchOutcome } from "@/lib/engine/pipeline";
 import { buildSerpApiProvider } from "@/lib/engine/serpapi";
 import { useLocale } from "@/lib/i18n/LocaleContext";
@@ -35,7 +34,7 @@ export function useSearch() {
   useEffect(() => stopSearch, [stopSearch]);
 
   const runSearch = useCallback(
-    async (submission: SearchSubmission, apiKey: string) => {
+    async (submission: SearchSubmission, sessionToken: string) => {
       stopSearch();
       setError(null);
       setResult(null);
@@ -44,8 +43,13 @@ export function useSearch() {
 
       const controller = new AbortController();
       abortRef.current = controller;
-      const provider = apiKey === MOCK_API_KEY ? mockProvider : buildSerpApiProvider(apiKey);
-      const opts = { provider, onStage: setStage, signal: controller.signal };
+      // The session token, not a key -- the Worker resolves it to this
+      // user's own stored SerpApi key server-side.
+      const opts = {
+        provider: buildSerpApiProvider(sessionToken),
+        onStage: setStage,
+        signal: controller.signal,
+      };
 
       try {
         const outcome =
