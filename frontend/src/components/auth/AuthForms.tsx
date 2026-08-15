@@ -73,8 +73,9 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            minLength={3}
-            maxLength={16}
+            // Register-only, same reasoning as the password field below.
+            minLength={tab === "register" ? 3 : undefined}
+            maxLength={tab === "register" ? 16 : undefined}
             required
             autoComplete="username"
             className={INPUT_CLASS}
@@ -88,8 +89,12 @@ export function AuthForms({ onRegister, onLogin, error, clearError }: AuthFormsP
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
-            maxLength={64}
+            // Length rules apply to CHOOSING a password, never to typing
+            // an existing one: enforcing them on login would permanently
+            // lock out any account whose password predates the rule (or
+            // was set by an admin outside it).
+            minLength={tab === "register" ? 8 : undefined}
+            maxLength={tab === "register" ? 64 : undefined}
             required
             autoComplete={tab === "login" ? "current-password" : "new-password"}
             className={INPUT_CLASS}
