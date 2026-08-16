@@ -160,6 +160,7 @@ export const en = {
   "wizard.to.cityMode": "Pick specific cities",
   "wizard.to.cityPlaceholder": "Add a city…",
   "wizard.to.cityHint": "Add as many cities as you'd like compared.",
+  "wizard.to.removeCity": "Remove {city}",
 
   "wizard.who.adults": "Adults",
   "wizard.who.children": "Children",
@@ -387,6 +388,7 @@ export const zhHant: Dictionary = {
   "wizard.to.cityMode": "指定城市",
   "wizard.to.cityPlaceholder": "新增城市…",
   "wizard.to.cityHint": "可新增多個想比較的城市。",
+  "wizard.to.removeCity": "移除 {city}",
 
   "wizard.who.adults": "成人",
   "wizard.who.children": "兒童",
@@ -611,6 +613,7 @@ export const zhHans: Dictionary = {
   "wizard.to.cityMode": "指定城市",
   "wizard.to.cityPlaceholder": "添加城市…",
   "wizard.to.cityHint": "可添加多个想比较的城市。",
+  "wizard.to.removeCity": "移除 {city}",
 
   "wizard.who.adults": "成人",
   "wizard.who.children": "儿童",

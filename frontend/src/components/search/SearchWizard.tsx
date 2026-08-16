@@ -294,7 +294,7 @@ function ToStep({ api, meta, metaError }: { api: SearchWizardApi; meta: MetaResp
                       type="button"
                       onClick={() => patch({ destinationCities: draft.destinationCities.filter((x) => x.label !== c.label) })}
                       className="text-sky-400 hover:text-sky-600"
-                      aria-label={t("picker.change")}
+                      aria-label={t("wizard.to.removeCity", { city: c.label })}
                     >
                       ×
                     </button>
