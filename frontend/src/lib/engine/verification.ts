@@ -1,31 +1,19 @@
-// Live-price (or indicative-fallback) verification of the top candidate
-// groups -- port of backend/app/search/verification.py plus the caching/
-// observation-recording half of services/fares.py (the browser has no
-// separate service layer).
-//
-// Groups are verified whole, cheapest-group-first: a group is only taken
-// if ALL its origin variants fit the remaining live-call budget, which
-// keeps a primary-origin result and its alt-origin siblings verified
-// together -- ranking.ts's nearby-airport filter depends on that pairing.
+// Live-price (or indicative-fallback) verification of the top candidates
+// -- cheapest/most-promising first, up to the live-call budget.
 //
 // "Degraded" here means a live call FAILED (network, SerpApi error,
-// quota) -- the client-side analogue of the backend's budget-exhaustion
-// trigger. The candidate then falls back to an indicative estimate and is
-// flagged verified=false rather than erroring the whole search.
+// quota). The candidate then falls back to this user's own past
+// observation for the same route/dates/party if one exists (a REAL past
+// price, not a guess) and is flagged verified=false; with no such
+// observation there is nothing honest to show, so the candidate is
+// dropped rather than displaying a fabricated number.
 
-import {
-  FARE_CACHE_TTL_EMPTY_MS,
-  FARE_CACHE_TTL_VERIFIED_MS,
-  PER_SEARCH_LIVE_CAP,
-  VERIFY_CONCURRENCY,
-  VERIFY_TOP_N,
-} from "./constants";
+import { FARE_CACHE_TTL_EMPTY_MS, FARE_CACHE_TTL_VERIFIED_MS, PER_SEARCH_LIVE_CAP, VERIFY_CONCURRENCY, VERIFY_TOP_N } from "./constants";
 import { addDaysIso } from "./dates";
-import { estimate } from "./indicative";
+import { estimate, partyKey } from "./indicative";
 import { addObservations, cacheGet, cacheSet, recordLiveCall } from "./observations";
-import { groupBestPrice } from "./pruning";
 import { ProxyError, SerpApiError } from "./serpapi";
-import type { Candidate, CandidateGroup, EngineProvider, FareOption, FareQuery, SearchSpace, VerifiedItinerary } from "./types";
+import type { Candidate, EngineProvider, FareOption, FareQuery, SearchSpace, VerifiedItinerary } from "./types";
 
 export function passesHardConstraints(option: FareOption, space: SearchSpace): boolean {
   if (option.slices.length > 0) {
@@ -46,32 +34,14 @@ export function passesHardConstraints(option: FareOption, space: SearchSpace): b
       if (minutes < space.minNormalMinutes || minutes > space.maxNormalMinutes) return false;
     }
   }
-  // Budget is per person (adults=1 is the supported default).
+  // SerpApi's price is always for the whole party -- max_total is asked
+  // for, and must be compared, the same way.
   if (option.price > space.maxTotal) return false;
   return true;
 }
 
-export function selectCandidatesToVerify(groups: CandidateGroup[], callBudget: number): Candidate[] {
-  const selected: CandidateGroup[] = [];
-  let used = 0;
-  for (const group of groups) {
-    if (used + group.candidates.length > callBudget) continue; // whole groups only -- try smaller ones
-    selected.push(group);
-    used += group.candidates.length;
-    if (used >= callBudget) break;
-  }
-  if (selected.length > 0) return selected.flatMap((g) => g.candidates);
-  if (groups.length === 0) return [];
-
-  // Budget too tight for even the cheapest whole group -- verify as much
-  // of it as fits rather than nothing (sacrifices pairing for this one
-  // group, only under budgets tighter than any real default).
-  const cheapest = [...groups].sort((a, b) => groupBestPrice(a) - groupBestPrice(b))[0];
-  return [...cheapest.candidates].sort((a, b) => a.estimatedPrice - b.estimatedPrice).slice(0, callBudget);
-}
-
 export function cacheKey(providerName: string, query: FareQuery): string {
-  return `fare:v1:${providerName}:${query.origin}:${query.destination}:${query.departDate}:${query.returnDate}:${query.currency}:${query.maxStops}:${query.tripType}`;
+  return `fare:v2:${providerName}:${query.origin}:${query.destination}:${query.departDate}:${query.returnDate}:${query.currency}:${query.maxStops}:${query.tripType}:${partyKey(query.passengers)}:${query.travelClass}`;
 }
 
 async function fetchOptions(
@@ -110,6 +80,7 @@ async function fetchOptions(
         trip_type: query.tripType,
         fare: o.price,
         observed_at: now,
+        party_key: partyKey(query.passengers),
       })),
     );
   }
@@ -118,22 +89,25 @@ async function fetchOptions(
 
 export async function verifyTop(
   space: SearchSpace,
-  groups: CandidateGroup[],
+  candidates: Candidate[],
   provider: EngineProvider,
   signal?: AbortSignal,
 ): Promise<{ verified: VerifiedItinerary[]; degraded: boolean }> {
   const callBudget = Math.min(VERIFY_TOP_N, PER_SEARCH_LIVE_CAP);
-  const toVerify = selectCandidatesToVerify(groups, callBudget);
+  // pruning.ts already sorted candidates signal-first/cheapest-first --
+  // just take the top of the live-call budget.
+  const toVerify = candidates.slice(0, callBudget);
 
   let anyDegraded = false;
 
   async function verifyOne(candidate: Candidate): Promise<VerifiedItinerary | null> {
     const query: FareQuery = {
-      origin: candidate.origin,
-      destination: candidate.destination,
+      origin: space.originGroup,
+      destination: candidate.destination.joined,
       departDate: candidate.departDate,
       returnDate: candidateReturnDate(candidate),
-      adults: space.adults,
+      passengers: space.passengers,
+      travelClass: space.travelClass,
       currency: space.currency,
       maxStops: space.maxStops,
       tripType: space.tripType,
@@ -143,8 +117,8 @@ export async function verifyTop(
 
     if (degraded) {
       anyDegraded = true;
-      const [price] = estimate(candidate.origin, candidate.destination, query.departDate, query.returnDate, space.tripType);
-      if (price > space.maxTotal) return null;
+      const [price] = estimate(query.origin, query.destination, query.departDate, query.returnDate, space.tripType, space.passengers);
+      if (price === null || price > space.maxTotal) return null;
       const fallback: FareOption = {
         price,
         currency: space.currency,
@@ -157,7 +131,6 @@ export async function verifyTop(
         slices: [],
       };
       return {
-        origin: candidate.origin,
         destination: candidate.destination,
         departDate: candidate.departDate,
         returnDate: query.returnDate,
@@ -171,7 +144,6 @@ export async function verifyTop(
     if (passing.length === 0) return null;
     const best = passing.reduce((a, b) => (b.price < a.price ? b : a));
     return {
-      origin: candidate.origin,
       destination: candidate.destination,
       departDate: candidate.departDate,
       returnDate: query.returnDate,
@@ -181,7 +153,8 @@ export async function verifyTop(
     };
   }
 
-  // Concurrency-limited pool (the backend uses an asyncio semaphore of 4).
+  // Concurrency-limited pool (the original backend used an asyncio
+  // semaphore of 4).
   const results: (VerifiedItinerary | null)[] = new Array(toVerify.length).fill(null);
   let next = 0;
   async function workerLoop(): Promise<void> {
@@ -197,8 +170,7 @@ export async function verifyTop(
 }
 
 function candidateReturnDate(candidate: Candidate): string {
-  // return_date is derived, not stored: depart + tripLength days --
-  // matches the Python Candidate.return_date property. tripLength 0 (the
-  // one-way sentinel) naturally yields returnDate === departDate.
+  // return_date is derived, not stored: depart + tripLength days.
+  // tripLength 0 (the one-way sentinel) naturally yields returnDate === departDate.
   return addDaysIso(candidate.departDate, candidate.tripLength);
 }

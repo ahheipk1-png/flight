@@ -1,121 +1,89 @@
 // Prune the coarse grid to promising neighborhoods, then expand each into
-// every origin/metro-airport combination -- port of
-// backend/app/search/pruning.py, including its two tie-break rules.
-//
-// Candidates are grouped by (destination, departDate, tripLength) and
-// pruning keeps or drops a GROUP whole -- it never lets one origin survive
-// while its group-mates get cut. That pairing is what lets verification
-// and ranking compare a primary-origin price against an alt-origin price
-// for the exact same trip.
+// every date/trip-length combination nearby. With origin and destination
+// each collapsed to one already-optimized comma-joined airport group (see
+// FareQuery), a "candidate" is just (destination group, date, trip
+// length) -- no per-origin-variant pairing is needed anymore.
 
 import { COARSE_EXPAND_WINDOW_DAYS, PRUNE_MAX_CANDIDATES, PRUNE_OVERSHOOT_RATIO, PRUNE_TOP_CELLS } from "./constants";
 import { addDaysIso } from "./dates";
-import { getMetroSiblings } from "./geo";
 import { estimate } from "./indicative";
-import type { Candidate, CandidateGroup, Cell, EstimateSource, SearchSpace } from "./types";
+import type { Candidate, EstimateSource, SearchSpace } from "./types";
 
 // Lower = more specific/trustworthy; mirrors indicative.ts's resolution
-// order. Used to break price ties so a real deal's exact date anchors the
-// expansion window instead of an arbitrary same-priced neighbor (tier 2
-// projects a single nearby observation flatly across its whole window).
-const SOURCE_RANK: Record<EstimateSource, number> = {
+// order. A candidate with no signal at all (never priced, no history)
+// ranks last -- it's neither promoted nor excluded, just untried.
+const SOURCE_RANK: Record<EstimateSource | "none", number> = {
   observation_exact: 0,
   observation_nearest: 1,
-  baseline: 2,
+  none: 2,
 };
 
-function groupBestKey(group: CandidateGroup): [number, number] {
-  // Price-only min with first-wins ties, exactly like Python's
-  // min(candidates, key=price) -- the source-rank tie-break applies to
-  // ordering GROUPS against each other, not to picking a group's own
-  // best candidate.
-  const best = group.candidates.reduce((a, b) => (b.estimatedPrice < a.estimatedPrice ? b : a));
-  return [best.estimatedPrice, SOURCE_RANK[best.estimateSource]];
+function rankOf(c: Pick<Candidate, "estimateSource">): number {
+  return SOURCE_RANK[c.estimateSource ?? "none"];
 }
 
-export function groupBestPrice(group: CandidateGroup): number {
-  return Math.min(...group.candidates.map((c) => c.estimatedPrice));
+function compareCandidates(a: Candidate, b: Candidate): number {
+  const ra = rankOf(a);
+  const rb = rankOf(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 2) return 0; // both signal-less -- stable sort keeps input order
+  return (a.estimatedPrice as number) - (b.estimatedPrice as number);
 }
 
-export function pruneAndExpand(space: SearchSpace, coarseCells: Cell[]): CandidateGroup[] {
-  if (coarseCells.length === 0) return [];
+export function pruneAndExpand(space: SearchSpace, coarse: Candidate[]): Candidate[] {
+  if (coarse.length === 0) return [];
 
-  // One seed slot per destination (its cheapest coarse date, ties broken
-  // by estimate specificity) so one cheap destination can't hog every
-  // neighborhood slot.
-  const bestPerDestination = new Map<string, Cell>();
-  for (const cell of coarseCells) {
-    const current = bestPerDestination.get(cell.destination);
-    if (
-      !current ||
-      cell.estimatedPrice < current.estimatedPrice ||
-      (cell.estimatedPrice === current.estimatedPrice &&
-        SOURCE_RANK[cell.estimateSource] < SOURCE_RANK[current.estimateSource])
-    ) {
-      bestPerDestination.set(cell.destination, cell);
+  // One seed slot per destination group (its cheapest/most-recent coarse
+  // date) so one cheap destination can't hog every neighborhood slot.
+  const bestPerDestination = new Map<string, Candidate>();
+  for (const c of coarse) {
+    const current = bestPerDestination.get(c.destination.key);
+    if (!current || compareCandidates(c, current) < 0) {
+      bestPerDestination.set(c.destination.key, c);
     }
   }
 
-  const seedCells = [...bestPerDestination.values()]
-    .sort((a, b) => a.estimatedPrice - b.estimatedPrice)
-    .slice(0, PRUNE_TOP_CELLS);
+  const seeds = [...bestPerDestination.values()].sort(compareCandidates).slice(0, PRUNE_TOP_CELLS);
 
-  const groups = new Map<string, CandidateGroup>();
+  const seen = new Set<string>();
+  const expanded: Candidate[] = [];
 
-  for (const seed of seedCells) {
-    const siblings = getMetroSiblings(seed.destination);
-    const metroIatas = siblings.length > 0 ? siblings.map((a) => a.iata) : [seed.destination];
-
+  for (const seed of seeds) {
     const windowDates: string[] = [];
     for (let offset = -COARSE_EXPAND_WINDOW_DAYS; offset <= COARSE_EXPAND_WINDOW_DAYS; offset++) {
       const d = addDaysIso(seed.departDate, offset);
       if (d >= space.departureFrom && d <= space.departureTo) windowDates.push(d);
     }
 
-    for (const destIata of metroIatas) {
-      for (const depart of windowDates) {
-        for (let tripLength = space.tripLengthMin; tripLength <= space.tripLengthMax; tripLength++) {
-          const groupKey = `${destIata}|${depart}|${tripLength}`;
-          let group = groups.get(groupKey);
-          if (!group) {
-            group = { destination: destIata, departDate: depart, tripLength, candidates: [] };
-            groups.set(groupKey, group);
-          }
+    for (const depart of windowDates) {
+      for (let tripLength = space.tripLengthMin; tripLength <= space.tripLengthMax; tripLength++) {
+        const key = `${seed.destination.key}|${depart}|${tripLength}`;
+        if (seen.has(key)) continue; // overlapping seed windows revisit slots
+        seen.add(key);
 
-          const alreadyPriced = new Set(group.candidates.map((c) => c.origin));
-          for (const origin of space.originAirports) {
-            if (alreadyPriced.has(origin.iata)) continue; // overlapping seed windows revisit groups
-            const returnDate = addDaysIso(depart, tripLength);
-            const [price, source] = estimate(origin.iata, destIata, depart, returnDate, space.tripType);
-            group.candidates.push({
-              origin: origin.iata,
-              destination: destIata,
-              departDate: depart,
-              tripLength,
-              estimatedPrice: price,
-              estimateSource: source,
-            } satisfies Candidate);
-          }
-        }
+        const returnDate = addDaysIso(depart, tripLength);
+        const [price, source] = estimate(
+          space.originGroup,
+          seed.destination.joined,
+          depart,
+          returnDate,
+          space.tripType,
+          space.passengers,
+        );
+        expanded.push({ destination: seed.destination, departDate: depart, tripLength, estimatedPrice: price, estimateSource: source });
       }
     }
   }
 
-  const allGroups = [...groups.values()].sort((a, b) => {
-    const [pa, ra] = groupBestKey(a);
-    const [pb, rb] = groupBestKey(b);
-    return pa - pb || ra - rb;
-  });
+  expanded.sort(compareCandidates);
 
-  // PRUNE_MAX_CANDIDATES budgets total (origin x date x length)
-  // candidates; translate into a group cap so the pairing invariant holds.
-  const originsInPlay = Math.max(1, space.originAirports.length);
-  const maxGroups = Math.max(1, Math.floor(PRUNE_MAX_CANDIDATES / originsInPlay));
-
+  // A budget ceiling only makes sense against a real price signal --
+  // signal-less candidates always pass it rather than being excluded on
+  // no basis.
   const ceiling = space.maxTotal * PRUNE_OVERSHOOT_RATIO;
-  const withinBudget = allGroups.filter((g) => groupBestPrice(g) <= ceiling);
+  const withinBudget = expanded.filter((c) => c.estimatedPrice === null || c.estimatedPrice <= ceiling);
   // A tight ceiling that filters everything would silently starve
-  // verification -- fall back to the full price-sorted list instead.
-  const survivors = withinBudget.length > 0 ? withinBudget : allGroups;
-  return survivors.slice(0, maxGroups);
+  // verification -- fall back to the full sorted list instead.
+  const survivors = withinBudget.length > 0 ? withinBudget : expanded;
+  return survivors.slice(0, PRUNE_MAX_CANDIDATES);
 }

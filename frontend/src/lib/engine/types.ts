@@ -6,16 +6,20 @@
 // them to display formatters, so real Date objects would add timezone
 // hazards without buying anything.
 
-import type { AirportMeta } from "@/lib/types";
+import type { Passengers, TravelClass } from "@/lib/types";
 
 export type EngineTripType = "round_trip" | "one_way";
 
 export interface FareQuery {
+  // Comma-joined IATA groups (e.g. "YYZ,YTZ,YHM") -- already resolved by
+  // the time they reach here. SerpApi compares every airport in the group
+  // itself, so the engine never needs a per-airport loop.
   origin: string;
   destination: string;
   departDate: string;
   returnDate: string;
-  adults: number;
+  passengers: Passengers;
+  travelClass: TravelClass;
   currency: string;
   maxStops: number | null;
   // Disambiguates the one-way sentinel (returnDate === departDate) from a
@@ -63,43 +67,33 @@ export interface FareOption {
   slices: FareSlice[];
 }
 
-export type EstimateSource = "observation_exact" | "observation_nearest" | "baseline";
+export type EstimateSource = "observation_exact" | "observation_nearest";
 
-export interface Cell {
-  origin: string;
-  destination: string;
-  departDate: string;
-  tripLength: number;
-  estimatedPrice: number;
-  estimateSource: EstimateSource;
+/** A destination group ready to query: either a curated region or a
+ * picked city, always resolved to a joined IATA string by the time the
+ * pipeline builds one. */
+export interface DestinationGroup {
+  key: string;
+  joined: string;
+  label: string;
 }
 
 export interface Candidate {
-  origin: string;
-  destination: string;
+  destination: DestinationGroup;
   departDate: string;
   tripLength: number;
-  estimatedPrice: number;
-  estimateSource: EstimateSource;
-}
-
-/** Every origin-airport variant of the same (destination, departDate,
- * tripLength) trip, kept together so verification/ranking can always
- * compare a primary-origin price against an alt-origin price for the
- * exact same trip. Pruning keeps or drops a group whole. */
-export interface CandidateGroup {
-  destination: string;
-  departDate: string;
-  tripLength: number;
-  candidates: Candidate[];
+  // null = no price signal available (no matching past observation from
+  // THIS user) -- never a fabricated number. Candidates without a signal
+  // keep their original date-stride order rather than being sorted by a
+  // guess; see indicative.ts.
+  estimatedPrice: number | null;
+  estimateSource: EstimateSource | null;
 }
 
 export interface SearchSpace {
-  primaryOrigin: AirportMeta;
-  originAirports: AirportMeta[];
-  alternateOrigins: AirportMeta[];
-  destinationAirports: AirportMeta[];
-  destinationPrimaries: AirportMeta[];
+  originGroup: string; // comma-joined IATA codes, ready for departure_id
+  originLabel: string;
+  destinationGroups: DestinationGroup[];
   tripType: EngineTripType;
   departureFrom: string;
   departureTo: string;
@@ -110,14 +104,12 @@ export interface SearchSpace {
   maxNormalMinutes: number;
   maxTotal: number;
   currency: string;
-  adults: number;
-  maxGroundMinutes: number;
-  minSavingPerPerson: number;
+  passengers: Passengers;
+  travelClass: TravelClass;
 }
 
 export interface VerifiedItinerary {
-  origin: string;
-  destination: string;
+  destination: DestinationGroup;
   departDate: string;
   returnDate: string;
   tripLength: number;
@@ -133,7 +125,7 @@ export interface EngineProvider {
   searchOneWay(query: FareQuery, signal?: AbortSignal): Promise<FareOption[]>;
   searchMultiCity(
     legs: MultiCityLeg[],
-    opts: { adults: number; currency: string; maxStops: number | null },
+    opts: { passengers: Passengers; travelClass: TravelClass; currency: string; maxStops: number | null },
     signal?: AbortSignal,
   ): Promise<FareOption[]>;
 }

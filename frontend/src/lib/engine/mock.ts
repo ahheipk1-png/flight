@@ -8,6 +8,7 @@
 // porting; determinism per query is what matters, not cross-language
 // numeric parity. Same (query) always -> same options, forever.
 
+import type { Passengers } from "@/lib/types";
 import { estimateDistanceKm } from "./mockGeo";
 import { ROUTE_BASELINES } from "./seed";
 import type { EngineProvider, FareLeg, FareOption, FareQuery, FareSlice } from "./types";
@@ -15,6 +16,20 @@ import type { EngineProvider, FareLeg, FareOption, FareQuery, FareSlice } from "
 export const MOCK_API_KEY = "demo";
 
 const ORIGIN_FACTOR: Record<string, number> = { YYZ: 1.0, YTZ: 1.05, YHM: 0.88, YKF: 0.95, BUF: 0.75 };
+
+/** Query origin/destination are comma-joined groups now (e.g.
+ * "YYZ,YTZ,YHM") -- the mock model only ever priced/routed a single
+ * airport, so it uses the first one in the group as representative. */
+function firstIata(group: string): string {
+  return group.split(",")[0];
+}
+
+/** Rough per-party-member fare weight -- children and in-seat infants fly
+ * at a discount, lap infants at a steep one. A mock approximation only;
+ * real fares come from SerpApi (see serpapi.ts's passengerParams). */
+function partyWeight(p: Passengers): number {
+  return p.adults + p.children * 0.75 + p.infants_in_seat * 0.75 + p.infants_on_lap * 0.1;
+}
 
 const CONNECTING_HUB: Record<string, string> = {
   HND: "ICN", NRT: "ICN", KIX: "ICN", ITM: "HND", UKB: "KIX",
@@ -65,12 +80,12 @@ class Rng {
 }
 
 function legDurationMin(from: string, to: string): number {
-  const km = estimateDistanceKm(from, to);
+  const km = estimateDistanceKm(firstIata(from), firstIata(to));
   return Math.round((km / 830) * 60) + 40;
 }
 
 function baseline(destination: string): number {
-  return ROUTE_BASELINES.toronto?.[destination] ?? 1100;
+  return ROUTE_BASELINES.toronto?.[firstIata(destination)] ?? 1100;
 }
 
 function seasonalFactor(dateIso: string): number {
@@ -95,7 +110,7 @@ function priceFor(query: FareQuery, rng: Rng, isOnestop: boolean): number {
   const nights = Math.round((Date.parse(query.returnDate) - Date.parse(query.departDate)) / 86_400_000);
   let price =
     baseline(query.destination) *
-    (ORIGIN_FACTOR[query.origin] ?? 1.0) *
+    (ORIGIN_FACTOR[firstIata(query.origin)] ?? 1.0) *
     seasonalFactor(query.departDate) *
     weekdayFactor(query.departDate) *
     // One-way has no nights-based pricing; ~60% of the round-trip level.
@@ -103,7 +118,7 @@ function priceFor(query: FareQuery, rng: Rng, isOnestop: boolean): number {
   if (isOnestop) price *= rng.uniform(0.85, 0.94);
   if (rng.random() < 0.07) price *= 0.74; // planted deal
   price *= rng.uniform(0.93, 1.08);
-  price *= query.adults;
+  price *= partyWeight(query.passengers);
   return Math.round(price * 100) / 100;
 }
 
@@ -121,13 +136,16 @@ function makeLegs(
   const depHour = rng.randint(6, 22);
   const carrier = rng.choice(CARRIER_POOL);
 
+  const originIata = firstIata(query.origin);
+  const destinationIata = firstIata(query.destination);
+
   if (hub === null) {
     const duration = legDurationMin(query.origin, query.destination);
     return {
       legs: [
         {
-          from_iata: query.origin,
-          to_iata: query.destination,
+          from_iata: originIata,
+          to_iata: destinationIata,
           dep_time: isoAt(query.departDate, depHour),
           arr_time: isoAt(query.departDate, depHour, duration),
           carrier,
@@ -146,7 +164,7 @@ function makeLegs(
   return {
     legs: [
       {
-        from_iata: query.origin,
+        from_iata: originIata,
         to_iata: hub,
         dep_time: isoAt(query.departDate, depHour),
         arr_time: isoAt(query.departDate, depHour, leg1Min),
@@ -156,7 +174,7 @@ function makeLegs(
       },
       {
         from_iata: hub,
-        to_iata: query.destination,
+        to_iata: destinationIata,
         dep_time: isoAt(query.departDate, depHour, leg1Min + layoverMin),
         arr_time: isoAt(query.departDate, depHour, leg1Min + layoverMin + leg2Min),
         carrier: carrier2,
@@ -192,8 +210,8 @@ function searchDeterministic(query: FareQuery): FareOption[] {
 
   options.push(makeOption(query, rng, null, priceFor(query, rng, false)));
 
-  const hub = CONNECTING_HUB[query.destination];
-  if (hub && hub !== query.origin) {
+  const hub = CONNECTING_HUB[firstIata(query.destination)];
+  if (hub && hub !== firstIata(query.origin)) {
     options.push(makeOption(query, rng, hub, priceFor(query, rng, true)));
   }
   if (rng.random() < 0.5) {
@@ -232,14 +250,15 @@ export const mockProvider: EngineProvider = {
         destination: leg.destination,
         departDate: leg.date,
         returnDate: leg.date,
-        adults: opts.adults,
+        passengers: opts.passengers,
+        travelClass: opts.travelClass,
         currency: opts.currency,
         maxStops: opts.maxStops,
         tripType: "one_way",
       };
       const rng = new Rng(`mc|${leg.origin}|${leg.destination}|${leg.date}|${opts.currency}`);
-      const hub = rng.random() < 0.4 ? (CONNECTING_HUB[leg.destination] ?? null) : null;
-      const usableHub = hub && hub !== leg.origin ? hub : null;
+      const hub = rng.random() < 0.4 ? (CONNECTING_HUB[firstIata(leg.destination)] ?? null) : null;
+      const usableHub = hub && hub !== firstIata(leg.origin) ? hub : null;
       const { legs: sliceLegs, layovers } = makeLegs(query, rng, usableHub);
       const duration = sliceLegs.reduce((s, l) => s + l.duration_min, 0) + layovers.reduce((s, [, m]) => s + m, 0);
       const slice: FareSlice = { legs: sliceLegs, layovers, stops: sliceLegs.length - 1, duration_min: duration };

@@ -6,15 +6,41 @@
 
 import type { MessageKey } from "@/lib/i18n/messages";
 
-export interface OriginPrefs {
-  region: string;
-  max_ground_minutes: number;
-  min_saving_per_person: number;
+// A place the way the wizard's picker resolves it: a set of IATA codes to
+// join with commas into ONE departure_id/arrival_id -- SerpApi compares
+// every airport in the group itself and returns whichever is cheapest, so
+// the engine never needs to try them one at a time (see engine/places.ts
+// and PlacePicker.tsx). `label` is display-only, never parsed.
+export interface PlaceSelection {
+  airports: string[];
+  label: string;
 }
 
+export type OriginPrefs = PlaceSelection;
+
+// Either a curated destination region (the existing 14 regions, resolved
+// against data/seed/airports.json) or an arbitrary picked city -- both
+// become one destination group in the engine.
+export type DestinationSelection = { kind: "region"; code: string; label: string } | ({ kind: "city" } & PlaceSelection);
+
 export interface DestinationPrefs {
-  regions: string[];
+  selections: DestinationSelection[];
 }
+
+// Only the fields that change SerpApi's price -- see the Google Flights
+// API reference (adults/children/infants_in_seat/infants_on_lap). Ages
+// beyond those four buckets don't affect fare, so the UI collects counts,
+// not birthdates.
+export interface Passengers {
+  adults: number;
+  children: number;
+  infants_in_seat: number;
+  infants_on_lap: number;
+}
+
+// SerpApi's travel_class: 1 Economy (default), 2 Premium economy,
+// 3 Business, 4 First.
+export type TravelClass = 1 | 2 | 3 | 4;
 
 export interface DatePrefs {
   departure_from: string; // ISO date
@@ -48,24 +74,26 @@ export interface SearchRequestBody {
   dates: DatePrefs;
   budget: BudgetPrefs;
   connections: ConnectionPrefs;
-  adults: number;
+  passengers: Passengers;
+  travel_class: TravelClass;
   trip_type: SearchTripType;
 }
 
 export interface MultiCityLegPref {
-  destination: string; // IATA
+  destination: PlaceSelection;
   date: string; // ISO date
 }
 
-// Deliberately separate from SearchRequestBody: no origin.max_ground_minutes/
-// min_saving_per_person (no nearby-airport-savings for manual multi-city)
-// and no destination.regions/dates window (every leg is explicit). Mirrors
-// backend schemas/search.py's MultiCitySearchRequest.
+// Deliberately separate from SearchRequestBody: no destination.regions/
+// dates window (every leg is explicit). Origin is explicit too -- multi-
+// city trips no longer assume any particular departure city.
 export interface MultiCitySearchRequestBody {
+  origin: OriginPrefs;
   legs: MultiCityLegPref[];
   budget: BudgetPrefs;
   connections: ConnectionPrefs;
-  adults: number;
+  passengers: Passengers;
+  travel_class: TravelClass;
 }
 
 // Frontend-only UI state union -- includes "multi_city", which has no

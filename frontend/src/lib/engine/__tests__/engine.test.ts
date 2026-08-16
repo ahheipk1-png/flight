@@ -1,6 +1,4 @@
 // Behavior pins for the engine's pure stages + full mock-provider runs.
-// These re-assert, in TS, the same behaviors the Python unit tests pin on
-// the backend (tests/unit/test_{indicative,pruning,verification,...}.py).
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { estimate } from "../indicative";
@@ -9,23 +7,25 @@ import { addObservations } from "../observations";
 import { parseRequest, runFlexibleSearch, runMultiCitySearch } from "../pipeline";
 import { pruneAndExpand } from "../pruning";
 import { rank } from "../ranking";
-import { resolveEquivalence } from "../geo";
-import type { Cell, FareOption, SearchSpace, VerifiedItinerary } from "../types";
+import type { Candidate, FareOption, SearchSpace } from "../types";
 import { cacheKey, passesHardConstraints } from "../verification";
-import type { SearchRequestBody, SearchStage } from "@/lib/types";
+import type { Passengers, SearchRequestBody, SearchStage } from "@/lib/types";
 
 beforeEach(() => {
   window.localStorage.clear();
 });
 
+const SOLO: Passengers = { adults: 1, children: 0, infants_in_seat: 0, infants_on_lap: 0 };
+
 function baseRequest(overrides: Partial<SearchRequestBody> = {}): SearchRequestBody {
   return {
-    origin: { region: "greater_toronto", max_ground_minutes: 120, min_saving_per_person: 100 },
-    destination: { regions: ["japan"] },
+    origin: { airports: ["YYZ", "YTZ", "YHM", "YKF"], label: "Toronto" },
+    destination: { selections: [{ kind: "region", code: "japan", label: "Japan" }] },
     dates: { departure_from: "2026-09-01", departure_to: "2026-09-20", trip_length_min: 7, trip_length_max: 10 },
     budget: { currency: "CAD", max_total: 50000 },
     connections: { max_stops: 1, min_normal_minutes: 120, max_normal_minutes: 300 },
-    adults: 1,
+    passengers: SOLO,
+    travel_class: 1,
     trip_type: "round_trip",
     ...overrides,
   };
@@ -50,18 +50,25 @@ describe("indicative estimate", () => {
   it("uses a fresh exact observation (tier 1)", () => {
     addObservations([
       {
-        origin: "YYZ",
+        origin: "YYZ,YTZ,YHM,YKF",
         destination: "KIX",
         departure_date: "2026-09-18",
         return_date: "2026-10-02",
         trip_type: "round_trip",
         fare: 987,
         observed_at: Date.now(),
+        party_key: "1-0-0-0",
       },
     ]);
-    const [price, source] = estimate("YYZ", "KIX", "2026-09-18", "2026-10-02", "round_trip");
+    const [price, source] = estimate("YYZ,YTZ,YHM,YKF", "KIX", "2026-09-18", "2026-10-02", "round_trip", SOLO);
     expect(price).toBe(987);
     expect(source).toBe("observation_exact");
+  });
+
+  it("returns no signal (never a guess) when this user has no matching history", () => {
+    const [price, source] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "one_way", SOLO);
+    expect(price).toBeNull();
+    expect(source).toBeNull();
   });
 
   it("never lets a one-way observation answer a round-trip query (or vice versa)", () => {
@@ -74,20 +81,40 @@ describe("indicative estimate", () => {
         trip_type: "one_way",
         fare: 500,
         observed_at: Date.now(),
+        party_key: "1-0-0-0",
       },
     ]);
-    const [rtPrice, rtSource] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "round_trip");
-    expect(rtSource).toBe("baseline");
-    expect(rtPrice).toBe(1400); // KIX baseline x YYZ factor 1.0
+    const [rtPrice] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "round_trip", SOLO);
+    expect(rtPrice).toBeNull();
 
-    const [owPrice, owSource] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "one_way");
+    const [owPrice, owSource] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "one_way", SOLO);
     expect(owSource).toBe("observation_exact");
     expect(owPrice).toBe(500);
   });
 
-  it("applies the one-way factor at the baseline tier", () => {
-    const [owPrice] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "one_way");
-    expect(owPrice).toBe(1400 * 0.6);
+  it("never lets a 2-adult observation answer a solo-adult query (or vice versa)", () => {
+    addObservations([
+      {
+        origin: "YYZ",
+        destination: "KIX",
+        departure_date: "2026-09-18",
+        return_date: "2026-09-18",
+        trip_type: "one_way",
+        fare: 2000,
+        observed_at: Date.now(),
+        party_key: "2-0-0-0",
+      },
+    ]);
+    const [soloPrice] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "one_way", SOLO);
+    expect(soloPrice).toBeNull();
+
+    const [pairPrice] = estimate("YYZ", "KIX", "2026-09-18", "2026-09-18", "one_way", {
+      adults: 2,
+      children: 0,
+      infants_in_seat: 0,
+      infants_on_lap: 0,
+    });
+    expect(pairPrice).toBe(2000);
   });
 
   it("weights nearby-date observations (tier 2)", () => {
@@ -100,9 +127,10 @@ describe("indicative estimate", () => {
         trip_type: "round_trip",
         fare: 900,
         observed_at: Date.now(),
+        party_key: "1-0-0-0",
       },
     ]);
-    const [price, source] = estimate("YYZ", "KIX", "2026-09-18", "2026-10-02", "round_trip");
+    const [price, source] = estimate("YYZ", "KIX", "2026-09-18", "2026-10-02", "round_trip", SOLO);
     expect(source).toBe("observation_nearest");
     expect(price).toBe(900); // single candidate -> its own fare, flatly projected
   });
@@ -115,13 +143,30 @@ describe("cache key", () => {
       destination: "KIX",
       departDate: "2026-09-18",
       returnDate: "2026-09-18",
-      adults: 1,
+      passengers: SOLO,
+      travelClass: 1 as const,
       currency: "CAD",
       maxStops: 1,
     };
     const rt = cacheKey("serpapi", { ...base, tripType: "round_trip" });
     const ow = cacheKey("serpapi", { ...base, tripType: "one_way" });
     expect(rt).not.toBe(ow);
+  });
+
+  it("separates different party sizes for the same route/dates", () => {
+    const base = {
+      origin: "YYZ",
+      destination: "KIX",
+      departDate: "2026-09-18",
+      returnDate: "2026-09-18",
+      travelClass: 1 as const,
+      currency: "CAD",
+      maxStops: 1,
+      tripType: "one_way" as const,
+    };
+    const solo = cacheKey("serpapi", { ...base, passengers: SOLO });
+    const pair = cacheKey("serpapi", { ...base, passengers: { adults: 2, children: 0, infants_in_seat: 0, infants_on_lap: 0 } });
+    expect(solo).not.toBe(pair);
   });
 });
 
@@ -139,8 +184,6 @@ describe("hard constraints", () => {
   });
 
   it("accepts a multi-day gap BETWEEN multi-city slices (it is not a layover)", () => {
-    // Two nonstop slices days apart: the gap appears nowhere in layovers,
-    // so the connection-comfort window never sees it.
     const option = bareOption({
       stops: 0,
       layovers: [],
@@ -159,84 +202,97 @@ describe("hard constraints", () => {
     expect(passesHardConstraints(option, constraintSpace())).toBe(false);
   });
 
-  it("enforces the budget", () => {
-    const option = bareOption({ price: 99999 });
-    expect(passesHardConstraints(option, constraintSpace({ maxTotal: 1200 }))).toBe(false);
+  it("enforces the budget as a PARTY TOTAL, not per person", () => {
+    // Regression: budget is entered as one number for the whole trip
+    // (the wizard's Budget step / form.budget.maxTotal), and SerpApi's
+    // price is always the party total -- a $2,400 budget for 2 adults
+    // (~$1,200/person, entirely reasonable) must NOT be silently rejected
+    // by treating $2,400 as if it were a per-person ceiling.
+    const twoAdults = { adults: 2, children: 0, infants_in_seat: 0, infants_on_lap: 0 };
+    const space = constraintSpace({ maxTotal: 2400, passengers: twoAdults });
+    const reasonableFareForTwo = bareOption({ price: 2200 }); // ~$1,100/person
+    expect(passesHardConstraints(reasonableFareForTwo, space)).toBe(true);
+
+    const trulyOverBudget = bareOption({ price: 99999 });
+    expect(passesHardConstraints(trulyOverBudget, space)).toBe(false);
   });
 });
 
-describe("origin group resolution", () => {
-  it("drops BUF at the default 120-minute ground tolerance, keeps the rest", () => {
+describe("parseRequest", () => {
+  it("joins the picked origin airports and resolves region destinations", () => {
     const space = parseRequest(baseRequest());
-    const iatas = space.originAirports.map((a) => a.iata);
-    expect(space.primaryOrigin.iata).toBe("YYZ");
-    expect(iatas).toContain("YTZ");
-    expect(iatas).toContain("YHM");
-    expect(iatas).toContain("YKF");
-    expect(iatas).not.toContain("BUF");
+    expect(space.originGroup).toBe("YYZ,YTZ,YHM,YKF");
+    expect(space.originLabel).toBe("Toronto");
+    expect(space.destinationGroups).toHaveLength(1);
+    expect(space.destinationGroups[0].joined.split(",")).toContain("HND");
   });
 
-  it("max_ground_minutes 0 means same-airport only", () => {
-    const space = parseRequest(baseRequest({ origin: { region: "greater_toronto", max_ground_minutes: 0, min_saving_per_person: 100 } }));
-    expect(space.originAirports.map((a) => a.iata)).toEqual(["YYZ"]);
-  });
-});
-
-describe("nearby-airport savings filter (rank)", () => {
-  function itin(origin: string, price: number): VerifiedItinerary {
-    return {
-      origin,
-      destination: "KIX",
-      departDate: "2026-09-10",
-      returnDate: "2026-09-17",
-      tripLength: 7,
-      option: bareOption({ price }),
-      verified: true,
-    };
-  }
-
-  it("keeps an alt origin only when net saving clears the threshold", () => {
-    const space = constraintSpace();
-    const equiv = resolveEquivalence("YYZ", "YHM")!;
-    const groundRT = equiv.ground_cost_estimate * 2;
-
-    // Just clears: primary 1000, alt priced so net saving == threshold.
-    const altPriceKeep = 1000 - space.minSavingPerPerson - groundRT;
-    const kept = rank(space, [itin("YYZ", 1000), itin("YHM", altPriceKeep)]);
-    expect(kept.map((r) => r.verifiedItinerary.origin)).toContain("YHM");
-    const yhm = kept.find((r) => r.verifiedItinerary.origin === "YHM")!;
-    expect(yhm.groundTransfer?.net_saving).toBeCloseTo(space.minSavingPerPerson);
-
-    // Just misses by a dollar.
-    const missed = rank(space, [itin("YYZ", 1000), itin("YHM", altPriceKeep + 1)]);
-    expect(missed.map((r) => r.verifiedItinerary.origin)).not.toContain("YHM");
+  it("resolves a picked city destination without touching the curated region list", () => {
+    const space = parseRequest(
+      baseRequest({ destination: { selections: [{ kind: "city", airports: ["JFK", "LGA"], label: "New York" }] } }),
+    );
+    expect(space.destinationGroups).toEqual([{ key: "city:JFK,LGA", joined: "JFK,LGA", label: "New York" }]);
   });
 
-  it("drops an alt origin with no primary result to compare against", () => {
-    const ranked = rank(constraintSpace(), [itin("YHM", 500)]);
-    expect(ranked).toHaveLength(0);
+  it("rejects an empty origin", () => {
+    expect(() => parseRequest(baseRequest({ origin: { airports: [], label: "" } }))).toThrow();
   });
 });
 
 describe("pruning", () => {
-  it("keeps whole groups and falls back when the budget ceiling excludes everything", () => {
-    const space = constraintSpace({ maxTotal: 1 }); // ceiling excludes all
-    const cells: Cell[] = [
+  it("falls back to the full list when the budget ceiling excludes every priced candidate", () => {
+    const space = constraintSpace({ maxTotal: 1 }); // ceiling excludes anything with a real price signal
+    const dest = { key: "city:XXX", joined: "XXX", label: "Nowhere" };
+    // A real observation at the exact seed date so the EXPAND phase (which
+    // re-estimates every date fresh, not just the coarse cell) actually
+    // has a live price signal to exclude via the ceiling.
+    addObservations([
       {
-        origin: "YYZ",
-        destination: "KIX",
-        departDate: "2026-09-05",
-        tripLength: 8,
-        estimatedPrice: 1400,
-        estimateSource: "baseline",
+        origin: space.originGroup,
+        destination: "XXX",
+        departure_date: "2026-09-05",
+        return_date: "2026-09-13",
+        trip_type: "round_trip",
+        fare: 1400,
+        observed_at: Date.now(),
+        party_key: "1-0-0-0",
       },
+    ]);
+    const coarse: Candidate[] = [
+      { destination: dest, departDate: "2026-09-05", tripLength: 8, estimatedPrice: 1400, estimateSource: "observation_exact" },
     ];
-    const groups = pruneAndExpand(space, cells);
-    expect(groups.length).toBeGreaterThan(0); // fallback, not empty
-    // Pairing invariant: every group carries every eligible origin.
-    for (const g of groups) {
-      expect(new Set(g.candidates.map((c) => c.origin)).size).toBe(space.originAirports.length);
-    }
+    const candidates = pruneAndExpand(space, coarse);
+    expect(candidates.length).toBeGreaterThan(0); // fallback, not empty
+  });
+
+  it("never fabricates a price for a signal-less candidate", () => {
+    const space = constraintSpace();
+    const dest = { key: "city:XXX", joined: "XXX", label: "Nowhere" };
+    const coarse: Candidate[] = [{ destination: dest, departDate: "2026-09-05", tripLength: 8, estimatedPrice: null, estimateSource: null }];
+    const candidates = pruneAndExpand(space, coarse);
+    expect(candidates.every((c) => c.estimatedPrice === null)).toBe(true);
+  });
+});
+
+describe("ranking", () => {
+  it("orders by best score and flags below-typical fares", () => {
+    const space = constraintSpace();
+    const dest = { key: "region:japan", joined: "HND", label: "Japan" };
+    const cheap = {
+      destination: dest,
+      departDate: "2026-09-10",
+      returnDate: "2026-09-17",
+      tripLength: 7,
+      option: bareOption({ price: 500, total_duration_min: 600 }),
+      verified: true,
+    };
+    const pricey = { ...cheap, option: bareOption({ price: 1500, total_duration_min: 600 }) };
+    const ranked = rank(space, [pricey, cheap]);
+    expect(ranked[0].verifiedItinerary.option.price).toBe(500); // cheapest scores best
+    const cheapRanked = ranked.find((r) => r.verifiedItinerary.option.price === 500)!;
+    const priceyRanked = ranked.find((r) => r.verifiedItinerary.option.price === 1500)!;
+    expect(cheapRanked.explanations.some((e) => e.key === "results.expl.belowTypical")).toBe(true);
+    expect(priceyRanked.explanations.some((e) => e.key === "results.expl.belowTypical")).toBe(false);
   });
 });
 
@@ -277,17 +333,30 @@ describe("end-to-end with the mock provider", () => {
     }
   });
 
-  it("multi-city: skips to verifying, sets city_stops", async () => {
+  it("2 adults: still returns results (regression -- used to be silently filtered to zero)", async () => {
+    const outcome = await runFlexibleSearch(
+      baseRequest({
+        budget: { currency: "CAD", max_total: 3000 },
+        passengers: { adults: 2, children: 0, infants_in_seat: 0, infants_on_lap: 0 },
+      }),
+      { provider: mockProvider },
+    );
+    expect(outcome.itineraries.length).toBeGreaterThan(0);
+  });
+
+  it("multi-city: skips to verifying, sets city_stops, honors the picked origin", async () => {
     const stages: SearchStage[] = [];
     const outcome = await runMultiCitySearch(
       {
+        origin: { airports: ["YYZ"], label: "Toronto" },
         legs: [
-          { destination: "IST", date: "2026-09-10" },
-          { destination: "BKK", date: "2026-09-15" },
+          { destination: { airports: ["IST"], label: "Istanbul" }, date: "2026-09-10" },
+          { destination: { airports: ["BKK"], label: "Bangkok" }, date: "2026-09-15" },
         ],
         budget: { currency: "CAD", max_total: 50000 },
         connections: { max_stops: 1, min_normal_minutes: 120, max_normal_minutes: 300 },
-        adults: 1,
+        passengers: SOLO,
+        travel_class: 1,
       },
       { provider: mockProvider, onStage: (s) => stages.push(s) },
     );
@@ -301,5 +370,21 @@ describe("end-to-end with the mock provider", () => {
     expect(it.city_stops?.map((a) => a.iata)).toEqual(["IST"]);
     expect(it.origin.iata).toBe("YYZ");
     expect(it.destination.iata).toBe("BKK");
+  });
+
+  it("multi-city with a multi-airport origin still flies from one of the picked airports", async () => {
+    const outcome = await runMultiCitySearch(
+      {
+        origin: { airports: ["YYZ", "YTZ"], label: "Toronto" },
+        legs: [{ destination: { airports: ["IST"], label: "Istanbul" }, date: "2026-09-10" }],
+        budget: { currency: "CAD", max_total: 50000 },
+        connections: { max_stops: 1, min_normal_minutes: 120, max_normal_minutes: 300 },
+        passengers: SOLO,
+        travel_class: 1,
+      },
+      { provider: mockProvider },
+    );
+    expect(outcome.itineraries.length).toBeGreaterThan(0);
+    expect(["YYZ", "YTZ"]).toContain(outcome.itineraries[0].origin.iata);
   });
 });

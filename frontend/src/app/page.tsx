@@ -8,11 +8,12 @@ import { ApiKeySettings } from "@/components/auth/ApiKeySettings";
 import { AuthForms } from "@/components/auth/AuthForms";
 import { BrandHeader } from "@/components/BrandHeader";
 import { ResultsLayout } from "@/components/results/ResultsLayout";
-import { SearchForm } from "@/components/search/SearchForm";
+import { SearchWizard } from "@/components/search/SearchWizard";
 import { CompleteState, PreloadCompleteIllustration, SearchingState } from "@/components/search/SearchStates";
 import { useAuth } from "@/hooks/useAuth";
 import { useMeta } from "@/hooks/useMeta";
 import { useSearch } from "@/hooks/useSearch";
+import { useSearchWizard } from "@/hooks/useSearchWizard";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import type { SearchSubmission, TripType } from "@/lib/types";
 
@@ -22,6 +23,11 @@ export default function Home() {
   const auth = useAuth();
   const { meta, error: metaError } = useMeta();
   const { uiState, stage, result, error, runSearch, reset } = useSearch();
+  const anywhereRegionCodes = meta?.travel_regions.filter((r) => r.kind === "destination").map((r) => r.code) ?? [];
+  // Owned here, not inside SearchWizard, so the draft survives the idle ->
+  // searching -> results -> idle round trip: "Edit search" must return the
+  // user to what they already typed, not reset every field.
+  const wizard = useSearchWizard(anywhereRegionCodes);
   const [view, setView] = useState<View>("app");
   // Captured at submit time: once trip_length_min/max can legitimately be
   // 0 for either a one-way sentinel or a genuine same-day round trip, the
@@ -35,6 +41,11 @@ export default function Home() {
     // The session token -- the Worker resolves it to this user's own
     // stored SerpApi key server-side; the key never reaches the browser.
     runSearch(submission, auth.token!);
+  }
+
+  function handleEditSearch() {
+    wizard.goTo("review");
+    reset();
   }
 
   const headerRight =
@@ -101,7 +112,7 @@ export default function Home() {
             {uiState === "idle" && (
               <div>
                 <Hero />
-                <SearchForm meta={meta} metaError={metaError} onSubmit={handleSearchSubmit} />
+                <SearchWizard api={wizard} meta={meta} metaError={metaError} onSubmit={handleSearchSubmit} />
               </div>
             )}
 
@@ -134,7 +145,7 @@ export default function Home() {
                 degraded={result.degraded}
                 airports={meta.airports}
                 tripType={lastTripType}
-                onEditSearch={reset}
+                onEditSearch={handleEditSearch}
               />
             )}
           </>

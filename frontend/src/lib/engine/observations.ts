@@ -21,6 +21,10 @@ export interface ObservationRow {
   trip_type: string;
   fare: number;
   observed_at: number; // epoch ms
+  // Undefined on rows saved before passenger-aware estimation existed --
+  // indicative.ts treats a missing key as the common solo-adult case, so
+  // old history keeps working for the case it's actually valid for.
+  party_key?: string;
 }
 
 function storage(): Storage | null {

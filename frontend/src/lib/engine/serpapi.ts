@@ -14,6 +14,7 @@
 // step's price wins), and the first round-trip call returns outbound
 // detail only (inbound_detail="indicative").
 
+import type { Passengers, TravelClass } from "@/lib/types";
 import { PROXY_BASE } from "./constants";
 import type { EngineProvider, FareLeg, FareOption, FareQuery, FareSlice, MultiCityLeg } from "./types";
 
@@ -252,6 +253,16 @@ async function proxyFetch(
   return data as RawResponse;
 }
 
+function passengerParams(passengers: Passengers, travelClass: TravelClass): Record<string, string | number> {
+  return {
+    adults: passengers.adults,
+    children: passengers.children,
+    infants_in_seat: passengers.infants_in_seat,
+    infants_on_lap: passengers.infants_on_lap,
+    travel_class: travelClass,
+  };
+}
+
 function roundTripParams(query: FareQuery): Record<string, string | number> {
   return {
     engine: "google_flights",
@@ -260,7 +271,7 @@ function roundTripParams(query: FareQuery): Record<string, string | number> {
     outbound_date: query.departDate,
     return_date: query.returnDate,
     currency: query.currency,
-    adults: query.adults,
+    ...passengerParams(query.passengers, query.travelClass),
     type: "1",
     gl: "ca",
     hl: "en",
@@ -274,14 +285,19 @@ function oneWayParams(query: FareQuery): Record<string, string | number> {
     arrival_id: query.destination,
     outbound_date: query.departDate,
     currency: query.currency,
-    adults: query.adults,
+    ...passengerParams(query.passengers, query.travelClass),
     type: "2",
     gl: "ca",
     hl: "en",
   };
 }
 
-function multiCityParams(legs: MultiCityLeg[], adults: number, currency: string): Record<string, string | number> {
+function multiCityParams(
+  legs: MultiCityLeg[],
+  passengers: Passengers,
+  travelClass: TravelClass,
+  currency: string,
+): Record<string, string | number> {
   const multiCityJson = JSON.stringify(
     legs.map((leg) => ({ departure_id: leg.origin, arrival_id: leg.destination, date: leg.date })),
   );
@@ -290,7 +306,7 @@ function multiCityParams(legs: MultiCityLeg[], adults: number, currency: string)
     type: "3",
     multi_city_json: multiCityJson,
     currency,
-    adults,
+    ...passengerParams(passengers, travelClass),
     gl: "ca",
     hl: "en",
   };
@@ -317,7 +333,7 @@ export function buildSerpApiProvider(sessionToken: string): EngineProvider {
       // choice per step, final step's price is the itinerary total (see
       // the Python module's docstring for the live-verified evidence and
       // its explicitly unproven >2-leg generalization).
-      const baseParams = multiCityParams(legs, opts.adults, opts.currency);
+      const baseParams = multiCityParams(legs, opts.passengers, opts.travelClass, opts.currency);
       let data = await proxyFetch(baseParams, sessionToken, signal);
       let chosen = cheapestMultiCityStep(data);
       if (chosen === null) return [];
