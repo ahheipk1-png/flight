@@ -153,6 +153,7 @@ function TripTypeStep({ api }: { api: SearchWizardApi }) {
     { value: "round_trip", label: "form.tripType.roundTrip" },
     { value: "one_way", label: "form.tripType.oneWay" },
     { value: "multi_city", label: "form.tripType.multiCity" },
+    { value: "open_jaw", label: "form.tripType.openJaw" },
   ];
   return (
     <div>
@@ -234,7 +235,9 @@ function ToStep({ api, meta, metaError }: { api: SearchWizardApi; meta: MetaResp
 
   return (
     <div>
-      <StepHeading>{t("wizard.step.to")}</StepHeading>
+      <StepHeading subtitle={draft.tripType === "open_jaw" ? t("wizard.step.to.openJawSubtitle") : undefined}>
+        {t("wizard.step.to")}
+      </StepHeading>
       <label className="flex items-center gap-2 text-sm text-slate-600">
         <input
           type="checkbox"
@@ -284,6 +287,24 @@ function ToStep({ api, meta, metaError }: { api: SearchWizardApi; meta: MetaResp
           ) : (
             <div className="mt-3">
               <div className="mb-2 flex flex-wrap gap-2">
+                {draft.destinationCountries.map((country) => (
+                  <span
+                    key={country.key}
+                    className="flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700 ring-1 ring-violet-200"
+                  >
+                    {country.name} · {t("picker.countryCityCount", { n: country.cities.length })}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patch({ destinationCountries: draft.destinationCountries.filter((x) => x.key !== country.key) })
+                      }
+                      className="text-violet-400 hover:text-violet-600"
+                      aria-label={t("wizard.to.removeCity", { city: country.name })}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
                 {draft.destinationCities.map((c) => (
                   <span
                     key={c.label}
@@ -303,8 +324,12 @@ function ToStep({ api, meta, metaError }: { api: SearchWizardApi; meta: MetaResp
               </div>
               <PlacePicker
                 placeholder={t("wizard.to.cityPlaceholder")}
-                excludeAirports={draft.destinationCities.flatMap((c) => c.airports)}
+                excludeAirports={[
+                  ...draft.destinationCities.flatMap((c) => c.airports),
+                  ...draft.destinationCountries.flatMap((c) => c.cities.flatMap((ci) => ci.airports)),
+                ]}
                 onSelect={(selection: PlaceSelection) => patch({ destinationCities: [...draft.destinationCities, selection] })}
+                onSelectCountry={(country) => patch({ destinationCountries: [...draft.destinationCountries, country] })}
               />
               <p className="mt-1 text-xs text-slate-400">{t("wizard.to.cityHint")}</p>
             </div>
@@ -567,7 +592,10 @@ function ReviewStep({ api }: { api: SearchWizardApi }) {
         ? t("form.where.anywhereNote")
         : draft.destinationMode === "regions"
           ? draft.regions.map((code) => localizedRegionName(code, code, locale)).join(", ")
-          : draft.destinationCities.map((c) => c.label).join(", ");
+          : [
+              ...draft.destinationCountries.map((c) => `${c.name} (${t("picker.countryCityCount", { n: c.cities.length })})`),
+              ...draft.destinationCities.map((c) => c.label),
+            ].join(", ");
 
   const passengerSummary = [
     t("wizard.who.adults") + " × " + draft.adults,
@@ -591,7 +619,9 @@ function ReviewStep({ api }: { api: SearchWizardApi }) {
       <p className="mt-4 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700 ring-1 ring-sky-200">
         {draft.tripType === "multi_city"
           ? t("wizard.review.multiCityCallCount", { n: draft.legs.length })
-          : t("wizard.review.callCount", { n: PER_SEARCH_LIVE_CAP })}
+          : draft.tripType === "open_jaw"
+            ? t("wizard.review.openJawCallCount", { n: Math.max(1, Math.floor(PER_SEARCH_LIVE_CAP / 2)) })
+            : t("wizard.review.callCount", { n: PER_SEARCH_LIVE_CAP })}
       </p>
 
       <details className="mt-6 rounded-xl border border-slate-200 p-4" onToggle={() => preloadPlaces()}>

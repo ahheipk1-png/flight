@@ -9,39 +9,44 @@
 // world", not just the curated set.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { preloadPlaces, searchPlaces, type PlaceCity } from "@/lib/engine/places";
+import { preloadPlaces, searchPlaces, toSelection, type PlaceCountry, type PlaceResult } from "@/lib/engine/places";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import type { PlaceSelection } from "@/lib/types";
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-none";
 
-function toSelection(city: PlaceCity): PlaceSelection {
-  const label = city.airports.length > 1 ? `${city.city} (${city.airports.join(", ")})` : `${city.city} (${city.airports[0]})`;
-  return { airports: city.airports, label };
-}
-
 interface PlacePickerProps {
   placeholder: string;
   onSelect: (selection: PlaceSelection) => void;
+  /** When provided, whole countries also show up in results (e.g. "Japan
+   * · 79 cities") -- omit this to keep single-place pickers (From, a
+   * multi-city leg) from offering something that isn't one flyable
+   * place. */
+  onSelectCountry?: (country: PlaceCountry) => void;
   excludeAirports?: string[]; // hide cities that would add nothing new (e.g. already-picked)
   autoFocus?: boolean;
 }
 
-export function PlacePicker({ placeholder, onSelect, excludeAirports, autoFocus }: PlacePickerProps) {
+export function PlacePicker({ placeholder, onSelect, onSelectCountry, excludeAirports, autoFocus }: PlacePickerProps) {
   const { t } = useLocale();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<PlaceCity[]>([]);
+  const [results, setResults] = useState<PlaceResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const requestId = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const excludeRef = useRef(excludeAirports);
+  const allowCountriesRef = useRef(Boolean(onSelectCountry));
 
   useEffect(() => {
     excludeRef.current = excludeAirports;
   }, [excludeAirports]);
+
+  useEffect(() => {
+    allowCountriesRef.current = Boolean(onSelectCountry);
+  }, [onSelectCountry]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -69,17 +74,25 @@ export function PlacePicker({ placeholder, onSelect, excludeAirports, autoFocus 
     setLoading(true);
     const id = ++requestId.current;
     debounceRef.current = setTimeout(() => {
-      searchPlaces(q).then((cities) => {
+      searchPlaces(q).then((places) => {
         if (requestId.current !== id) return; // a newer keystroke superseded this search
         const excluded = new Set(excludeRef.current ?? []);
-        setResults(cities.filter((c) => !c.airports.every((a) => excluded.has(a))));
+        const filtered = places.filter((p) => {
+          if (p.kind === "country") return allowCountriesRef.current;
+          return !p.airports.every((a) => excluded.has(a));
+        });
+        setResults(filtered);
         setLoading(false);
       });
     }, 150);
   }, []);
 
-  function pick(city: PlaceCity) {
-    onSelect(toSelection(city));
+  function pick(place: PlaceResult) {
+    if (place.kind === "country") {
+      onSelectCountry?.(place);
+    } else {
+      onSelect(toSelection(place));
+    }
     setQuery("");
     setResults([]);
     setOpen(false);
@@ -109,19 +122,31 @@ export function PlacePicker({ placeholder, onSelect, excludeAirports, autoFocus 
           {loading && <p className="px-3 py-2 text-sm text-slate-400">{t("picker.searching")}</p>}
           {!loading && results.length === 0 && <p className="px-3 py-2 text-sm text-slate-400">{t("picker.noMatches")}</p>}
           {!loading &&
-            results.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => pick(c)}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sky-50"
-              >
-                <span className="font-medium text-slate-800">{c.city}</span>
-                <span className="text-xs text-slate-400">
-                  {c.country} · {c.airports.join(", ")}
-                </span>
-              </button>
-            ))}
+            results.map((r) =>
+              r.kind === "country" ? (
+                <button
+                  key={r.key}
+                  type="button"
+                  onClick={() => pick(r)}
+                  className="flex w-full items-center justify-between bg-violet-50/60 px-3 py-2 text-left text-sm hover:bg-violet-100"
+                >
+                  <span className="font-medium text-violet-800">{r.name}</span>
+                  <span className="text-xs text-violet-400">{t("picker.countryCityCount", { n: r.cities.length })}</span>
+                </button>
+              ) : (
+                <button
+                  key={r.key}
+                  type="button"
+                  onClick={() => pick(r)}
+                  className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sky-50"
+                >
+                  <span className="font-medium text-slate-800">{r.city}</span>
+                  <span className="text-xs text-slate-400">
+                    {r.country} · {r.airports.join(", ")}
+                  </span>
+                </button>
+              ),
+            )}
         </div>
       )}
     </div>

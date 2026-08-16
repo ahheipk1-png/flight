@@ -53,7 +53,7 @@ export interface RunOptions {
  * once a PlacePicker has been used this session), then a bare-IATA stub
  * as a last resort -- the code came from a picker, so this should never
  * actually trigger in practice. */
-function airportRef(iata: string): AirportRef {
+export function airportRef(iata: string): AirportRef {
   const curated = getAirport(iata);
   if (curated) return { iata: curated.iata, name: curated.name, city: curated.city, lat: curated.lat, lon: curated.lon };
   const world = getAirportDetail(iata);
@@ -61,12 +61,10 @@ function airportRef(iata: string): AirportRef {
   return { iata, name: iata, city: iata, lat: 0, lon: 0 };
 }
 
-export function parseRequest(req: SearchRequestBody): SearchSpace {
-  if (req.origin.airports.length === 0) {
-    throw new EngineError("engine.errors.noOriginGroup");
-  }
-
-  const destinationGroups: DestinationGroup[] = req.destination.selections
+/** Shared by parseRequest and openJaw.ts's parseOpenJawRequest -- both
+ * take the same DestinationPrefs.selections shape. */
+export function resolveDestinationGroups(selections: SearchRequestBody["destination"]["selections"]): DestinationGroup[] {
+  return selections
     .map((sel): DestinationGroup => {
       if (sel.kind === "region") {
         const airports = getDestinationAirports([sel.code]);
@@ -75,7 +73,14 @@ export function parseRequest(req: SearchRequestBody): SearchSpace {
       return { key: `city:${sel.airports.join(",")}`, joined: sel.airports.join(","), label: sel.label };
     })
     .filter((g) => g.joined.length > 0);
+}
 
+export function parseRequest(req: SearchRequestBody): SearchSpace {
+  if (req.origin.airports.length === 0) {
+    throw new EngineError("engine.errors.noOriginGroup");
+  }
+
+  const destinationGroups = resolveDestinationGroups(req.destination.selections);
   if (destinationGroups.length === 0) {
     throw new EngineError("engine.errors.noDestinations");
   }
@@ -105,8 +110,48 @@ export function parseRequest(req: SearchRequestBody): SearchSpace {
  * as whichever one SerpApi actually picked as cheapest. Falls back to the
  * first airport in the requested group only for the rare degraded/
  * indicative result, which has no real legs at all. */
-function toItinerary(id: string, ranked: RankedItinerary, space: SearchSpace): ItineraryOut {
+export function toItinerary(id: string, ranked: RankedItinerary, space: SearchSpace): ItineraryOut {
   const it = ranked.verifiedItinerary;
+
+  if (it.returnOrigin) {
+    // Open-jaw: exactly two slices -- slice 0 flies OUT to the arrival
+    // city, slice 1 flies HOME from the (possibly different) departure
+    // city. Neither city_stops (a forward chain of stops) nor the generic
+    // last-leg-is-destination inference below applies here: the "last
+    // leg" always arrives back home, not at the interesting city.
+    const outboundLegs = it.option.slices[0]?.legs ?? [];
+    const inboundLegs = it.option.slices[1]?.legs ?? [];
+    const originIata = outboundLegs[0]?.from_iata || space.originGroup.split(",")[0];
+    const arrivalIata = outboundLegs[outboundLegs.length - 1]?.to_iata || it.destination.joined.split(",")[0];
+    const returnOriginIata = inboundLegs[0]?.from_iata || it.returnOrigin.joined.split(",")[0];
+
+    return {
+      id,
+      origin: airportRef(originIata),
+      destination: airportRef(arrivalIata),
+      depart_date: it.departDate,
+      return_date: it.returnDate,
+      trip_length: it.tripLength,
+      fare: it.option.price,
+      currency: it.option.currency,
+      stops: it.option.stops,
+      total_duration_min: it.option.total_duration_min,
+      legs: it.option.outbound_legs,
+      layovers: it.option.layovers,
+      carriers: it.option.carriers,
+      verified: it.verified,
+      ground_transfer: null,
+      city_stops: null,
+      return_origin: returnOriginIata !== arrivalIata ? airportRef(returnOriginIata) : null,
+      explanations: ranked.explanations,
+      rank_scores: {
+        cheapest: it.option.price,
+        fastest: it.option.total_duration_min,
+        best: ranked.bestScore,
+      },
+    };
+  }
+
   const legs = it.option.outbound_legs;
   const originIata = legs[0]?.from_iata || space.originGroup.split(",")[0];
   const destinationIata = legs.length > 0 ? legs[legs.length - 1].to_iata : it.destination.joined.split(",")[0];
@@ -131,6 +176,7 @@ function toItinerary(id: string, ranked: RankedItinerary, space: SearchSpace): I
     verified: it.verified,
     ground_transfer: null,
     city_stops: citystops,
+    return_origin: null,
     explanations: ranked.explanations,
     rank_scores: {
       cheapest: it.option.price,

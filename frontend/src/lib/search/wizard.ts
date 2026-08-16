@@ -3,10 +3,12 @@
 // (no React) so it's unit-testable without rendering anything, and so
 // SearchWizard.tsx and useSearchWizard.ts stay thin.
 
+import { expandCountry, type PlaceCountry } from "@/lib/engine/places";
 import type { MessageKey } from "@/lib/i18n/messages";
 import type {
   DestinationSelection,
   MultiCitySearchRequestBody,
+  OpenJawSearchRequestBody,
   PlaceSelection,
   SearchRequestBody,
   SearchSubmission,
@@ -21,6 +23,10 @@ export function stepsFor(tripType: TripType): StepId[] {
   if (tripType !== "multi_city") base.push("when"); // multi-city's dates are inline in the "to" leg editor
   return [...base, "who", "budget", "review"];
 }
+
+/** Open-jaw reuses every "round trip" step verbatim (same From/To/When/
+ * Who/Budget/Review) -- the only difference is which engine path
+ * buildSubmission routes to. */
 
 export interface LegDraft {
   destination: PlaceSelection | null;
@@ -37,6 +43,11 @@ export interface WizardDraft {
   destinationMode: "regions" | "cities";
   regions: string[];
   destinationCities: PlaceSelection[];
+  // A country pick adds many destination groups at once (one per city --
+  // never one giant comma-joined group, see engine/places.ts) but stays
+  // ONE chip in the UI, so it's tracked separately from individually
+  // picked cities rather than immediately flattened into destinationCities.
+  destinationCountries: PlaceCountry[];
 
   legs: LegDraft[];
 
@@ -100,6 +111,7 @@ export function defaultDraft(): WizardDraft {
     destinationMode: "regions",
     regions: [],
     destinationCities: [],
+    destinationCountries: [],
 
     legs: [
       { destination: null, date: from },
@@ -159,7 +171,9 @@ export function validateStep(draft: WizardDraft): StepError | null {
       if (draft.destinationMode === "regions") {
         return draft.regions.length > 0 ? null : { key: "form.errors.noRegion" };
       }
-      return draft.destinationCities.length > 0 ? null : { key: "wizard.errors.noDestinationCity" };
+      return draft.destinationCities.length > 0 || draft.destinationCountries.length > 0
+        ? null
+        : { key: "wizard.errors.noDestinationCity" };
 
     case "when": {
       if (draft.knowWhen) return draft.exactDepartureDate ? null : { key: "wizard.errors.noDepartureDate" };
@@ -187,7 +201,11 @@ function resolveDestinations(draft: WizardDraft): DestinationSelection[] {
   if (draft.destinationMode === "regions") {
     return draft.regions.map((code) => ({ kind: "region", code, label: code }));
   }
-  return draft.destinationCities.map((c) => ({ kind: "city", ...c }));
+  const cityPicks = draft.destinationCities.map((c): DestinationSelection => ({ kind: "city", ...c }));
+  const countryPicks = draft.destinationCountries.flatMap((country) =>
+    expandCountry(country).map((c): DestinationSelection => ({ kind: "city", ...c })),
+  );
+  return [...cityPicks, ...countryPicks];
 }
 
 /** Builds the engine request body, or returns the first failing step's
@@ -222,6 +240,7 @@ export function buildSubmission(
   if (!draft.origin) return { ok: false, error: { key: "wizard.errors.noOrigin" } };
 
   const isOneWay = draft.tripType === "one_way";
+  const isOpenJaw = draft.tripType === "open_jaw";
   const windowDays = daysBetween(draft.departureFrom, draft.departureTo);
   const selections = draft.knowWhere
     ? resolveDestinations(draft)
@@ -232,15 +251,22 @@ export function buildSubmission(
   const tripMin = isOneWay ? 0 : draft.knowWhen ? draft.exactTripLength : draft.specificRange ? draft.tripLengthMin : windowDays;
   const tripMax = isOneWay ? 0 : draft.knowWhen ? draft.exactTripLength : draft.specificRange ? draft.tripLengthMax : windowDays;
 
+  const dates = {
+    departure_from: effectiveDepartureFrom,
+    departure_to: effectiveDepartureTo,
+    trip_length_min: tripMin,
+    trip_length_max: tripMax,
+  };
+
+  if (isOpenJaw) {
+    const body: OpenJawSearchRequestBody = { origin: draft.origin, destination: { selections }, dates, budget, connections, passengers, travel_class: draft.travelClass };
+    return { ok: true, submission: { tripType: "open_jaw", body } };
+  }
+
   const body: SearchRequestBody = {
     origin: draft.origin,
     destination: { selections },
-    dates: {
-      departure_from: effectiveDepartureFrom,
-      departure_to: effectiveDepartureTo,
-      trip_length_min: tripMin,
-      trip_length_max: tripMax,
-    },
+    dates,
     budget,
     connections,
     passengers,

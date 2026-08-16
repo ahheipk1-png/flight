@@ -96,15 +96,34 @@ export interface MultiCitySearchRequestBody {
   travel_class: TravelClass;
 }
 
-// Frontend-only UI state union -- includes "multi_city", which has no
-// SearchTripType wire value of its own (it's a different endpoint/schema
-// entirely). SearchForm and useSearch both key off this to decide which
-// request shape/endpoint to submit.
-export type TripType = SearchTripType | "multi_city";
+// Same picked destinations serve as candidates for BOTH the outbound
+// arrival city and the inbound departure city -- the engine explores
+// (arrival, departure) pairs drawn from this one list, same-city pairs
+// included (an open-jaw search that happens to come back round-trip is a
+// valid, often-cheapest answer, not a failure). No dates/budget/etc
+// duplication needed: structurally identical to SearchRequestBody, just
+// without a trip_type (there's no one-way/multi-city equivalent of this
+// shape).
+export interface OpenJawSearchRequestBody {
+  origin: OriginPrefs;
+  destination: DestinationPrefs;
+  dates: DatePrefs;
+  budget: BudgetPrefs;
+  connections: ConnectionPrefs;
+  passengers: Passengers;
+  travel_class: TravelClass;
+}
+
+// Frontend-only UI state union -- includes "multi_city" and "open_jaw",
+// neither of which has a SearchTripType wire value of its own (each is a
+// different request shape entirely). SearchWizard and useSearch both key
+// off this to decide which request shape/engine path to use.
+export type TripType = SearchTripType | "multi_city" | "open_jaw";
 
 export type SearchSubmission =
   | { tripType: SearchTripType; body: SearchRequestBody }
-  | { tripType: "multi_city"; body: MultiCitySearchRequestBody };
+  | { tripType: "multi_city"; body: MultiCitySearchRequestBody }
+  | { tripType: "open_jaw"; body: OpenJawSearchRequestBody };
 
 export interface AirportMeta {
   iata: string;
@@ -198,8 +217,13 @@ export interface ItineraryOut {
   ground_transfer: GroundTransferOut | null;
   // Manual multi-city only: the intermediate leg endpoints in order (not
   // including `destination`, the final leg's arrival). null for round
-  // trip/one-way.
+  // trip/one-way/open-jaw.
   city_stops: AirportRef[] | null;
+  // Open-jaw only: the city flown OUT OF on the way home, when it's a
+  // different airport than `destination` (the city flown INTO). null for
+  // every other trip type, and also null for an open-jaw search that
+  // happened to come back round-trip (arrival and departure the same).
+  return_origin: AirportRef | null;
   explanations: ExplanationSpec[];
   rank_scores: { cheapest: number; fastest: number; best: number };
 }

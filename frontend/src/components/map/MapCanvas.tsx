@@ -87,6 +87,19 @@ export function MapCanvas({ airports, selected }: MapCanvasProps) {
       });
     }
 
+    // Open-jaw only: the city flown home FROM, when different from the
+    // arrival city already marked "destination" above.
+    if (selected.return_origin) {
+      const ro = selected.return_origin;
+      provider.addAirportMarker({
+        id: `return-origin-${ro.iata}`,
+        position: { lat: ro.lat, lon: ro.lon },
+        role: "city-stop",
+        label: `${localizedCityName(ro.iata, ro.city, locale)} (${ro.iata})`,
+        popupHtml: `<strong>${ro.iata}</strong> — ${ro.name}`,
+      });
+    }
+
     const coordsFor = (iata: string) => {
       if (iata === selected.origin.iata) return { lat: selected.origin.lat, lon: selected.origin.lon };
       if (iata === selected.destination.iata) return { lat: selected.destination.lat, lon: selected.destination.lon };

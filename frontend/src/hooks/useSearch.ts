@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { runOpenJawSearch } from "@/lib/engine/openJaw";
 import { EngineError, runFlexibleSearch, runMultiCitySearch, type SearchOutcome } from "@/lib/engine/pipeline";
 import { buildSerpApiProvider } from "@/lib/engine/serpapi";
 import { useLocale } from "@/lib/i18n/LocaleContext";
@@ -55,7 +56,9 @@ export function useSearch() {
         const outcome =
           submission.tripType === "multi_city"
             ? await runMultiCitySearch(submission.body, opts)
-            : await runFlexibleSearch(submission.body, opts);
+            : submission.tripType === "open_jaw"
+              ? await runOpenJawSearch(submission.body, opts)
+              : await runFlexibleSearch(submission.body, opts);
         if (controller.signal.aborted) return;
         setStage("done");
         setResult(outcome);

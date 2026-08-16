@@ -97,6 +97,7 @@ export const en = {
   "form.tripType.roundTrip": "Round trip",
   "form.tripType.oneWay": "One-way",
   "form.tripType.multiCity": "Multi-city",
+  "form.tripType.openJaw": "Open-jaw",
   "form.when.label": "When",
   "form.when.knowCheckbox": "I know exactly when",
   "form.when.exactDepartureLabel": "Departure date",
@@ -148,6 +149,7 @@ export const en = {
   "wizard.step.from.subtitle": "Any city in the world — search by name.",
   "wizard.step.to": "To",
   "wizard.step.to.multiCitySubtitle": "Add each city in order, with its date.",
+  "wizard.step.to.openJawSubtitle": "Pick where you might land, and where you might fly home from -- they can be the same city or different ones.",
   "wizard.step.when": "When",
   "wizard.step.who": "Who's travelling",
   "wizard.step.who.subtitle": "Only ages that change the fare are asked for.",
@@ -177,11 +179,13 @@ export const en = {
 
   "wizard.review.callCount": "This search checks up to {n} real, live prices before showing you anything — never a guess.",
   "wizard.review.multiCityCallCount": "This checks {n} live prices, one per city in your route.",
+  "wizard.review.openJawCallCount": "This checks up to {n} route combinations (arriving one city, departing another) for real, live prices -- never a guess.",
   "wizard.review.advanced": "Advanced (layovers)",
 
   "picker.searching": "Searching…",
   "picker.noMatches": "No cities found.",
   "picker.change": "Change",
+  "picker.countryCityCount": "{n} cities",
 
   "searching.title": "Finding smarter ways to fly…",
   "searching.stage.queued": "Getting started…",
@@ -211,6 +215,8 @@ export const en = {
   "results.connectionIn": "{duration} connection in {iata}",
   "results.groundTransport": "Ground transport {from} → {to}: ~{duration}, ~{cost} round trip",
   "results.stopIn": "Stop in {city}",
+  "results.returnsFrom": "Returns from {city}",
+  "results.flyHomeFrom": "Fly home from {city}",
   "results.whyThisTrip": "Why this trip",
   "results.detailNotVerified": "Detailed timing not yet verified.",
 
@@ -325,6 +331,7 @@ export const zhHant: Dictionary = {
   "form.tripType.roundTrip": "來回",
   "form.tripType.oneWay": "單程",
   "form.tripType.multiCity": "多城市",
+  "form.tripType.openJaw": "不同進出點",
   "form.when.label": "出發時間",
   "form.when.knowCheckbox": "我已確定出發時間",
   "form.when.exactDepartureLabel": "出發日期",
@@ -376,6 +383,7 @@ export const zhHant: Dictionary = {
   "wizard.step.from.subtitle": "世界各地城市皆可搜尋。",
   "wizard.step.to": "目的地",
   "wizard.step.to.multiCitySubtitle": "依序新增每一站城市與日期。",
+  "wizard.step.to.openJawSubtitle": "選擇可能抵達的城市，以及可能出發返程的城市——可以相同，也可以不同。",
   "wizard.step.when": "出發時間",
   "wizard.step.who": "同行旅客",
   "wizard.step.who.subtitle": "只詢問會影響票價的年齡分類。",
@@ -405,11 +413,13 @@ export const zhHant: Dictionary = {
 
   "wizard.review.callCount": "這次搜尋最多會查詢 {n} 筆真實即時票價後才顯示結果——絕不猜測。",
   "wizard.review.multiCityCallCount": "這會查詢 {n} 筆即時票價，行程中每個城市各一筆。",
+  "wizard.review.openJawCallCount": "這會查詢最多 {n} 種進出點組合（不同城市進出）的真實即時票價——絕不猜測。",
   "wizard.review.advanced": "進階設定（轉機）",
 
   "picker.searching": "搜尋中…",
   "picker.noMatches": "找不到符合的城市。",
   "picker.change": "變更",
+  "picker.countryCityCount": "{n} 個城市",
 
   "searching.title": "正在尋找更聰明的飛行方式…",
   "searching.stage.queued": "準備開始…",
@@ -439,6 +449,8 @@ export const zhHant: Dictionary = {
   "results.connectionIn": "在 {iata} 轉機 {duration}",
   "results.groundTransport": "地面接駁 {from} → {to}：約 {duration}，來回約 {cost}",
   "results.stopIn": "中停 {city}",
+  "results.returnsFrom": "從 {city} 返程",
+  "results.flyHomeFrom": "從 {city} 飛回家",
   "results.whyThisTrip": "推薦原因",
   "results.detailNotVerified": "詳細時間尚未確認。",
 
@@ -550,6 +562,7 @@ export const zhHans: Dictionary = {
   "form.tripType.roundTrip": "往返",
   "form.tripType.oneWay": "单程",
   "form.tripType.multiCity": "多城市",
+  "form.tripType.openJaw": "不同进出点",
   "form.when.label": "出发时间",
   "form.when.knowCheckbox": "我已确定出发时间",
   "form.when.exactDepartureLabel": "出发日期",
@@ -601,6 +614,7 @@ export const zhHans: Dictionary = {
   "wizard.step.from.subtitle": "世界各地城市皆可搜索。",
   "wizard.step.to": "目的地",
   "wizard.step.to.multiCitySubtitle": "依序添加每一站城市与日期。",
+  "wizard.step.to.openJawSubtitle": "选择可能抵达的城市，以及可能出发返程的城市——可以相同，也可以不同。",
   "wizard.step.when": "出发时间",
   "wizard.step.who": "同行旅客",
   "wizard.step.who.subtitle": "只询问会影响票价的年龄分类。",
@@ -630,11 +644,13 @@ export const zhHans: Dictionary = {
 
   "wizard.review.callCount": "这次搜索最多会查询 {n} 条真实即时票价后才显示结果——绝不猜测。",
   "wizard.review.multiCityCallCount": "这会查询 {n} 条即时票价，行程中每个城市各一条。",
+  "wizard.review.openJawCallCount": "这会查询最多 {n} 种进出点组合（不同城市进出）的真实即时票价——绝不猜测。",
   "wizard.review.advanced": "高级设置（转机）",
 
   "picker.searching": "搜索中…",
   "picker.noMatches": "未找到匹配的城市。",
   "picker.change": "更改",
+  "picker.countryCityCount": "{n} 个城市",
 
   "searching.title": "正在寻找更聪明的飞行方式…",
   "searching.stage.queued": "准备开始…",
@@ -664,6 +680,8 @@ export const zhHans: Dictionary = {
   "results.connectionIn": "在 {iata} 转机 {duration}",
   "results.groundTransport": "地面接驳 {from} → {to}：约 {duration}，往返约 {cost}",
   "results.stopIn": "中转 {city}",
+  "results.returnsFrom": "从 {city} 返程",
+  "results.flyHomeFrom": "从 {city} 飞回家",
   "results.whyThisTrip": "推荐原因",
   "results.detailNotVerified": "详细时间尚未确认。",
 

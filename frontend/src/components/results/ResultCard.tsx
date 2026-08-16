@@ -17,10 +17,13 @@ export function ResultCard({ itinerary, rank, tripType, selected, onSelect }: Re
   const { t, locale } = useLocale();
   const isOneWay = tripType === "one_way";
   const isMultiCity = tripType === "multi_city";
+  const isOpenJaw = tripType === "open_jaw";
+  const returnsElsewhere = Boolean(itinerary.return_origin && itinerary.return_origin.iata !== itinerary.destination.iata);
 
-  const route = isMultiCity
-    ? routeLabel([itinerary.origin.iata, ...(itinerary.city_stops ?? []).map((a) => a.iata), itinerary.destination.iata])
-    : routeLabel([itinerary.origin.iata, ...itinerary.layovers.map(([iata]) => iata), itinerary.destination.iata]);
+  const route =
+    isMultiCity || isOpenJaw
+      ? routeLabel([itinerary.origin.iata, ...(itinerary.city_stops ?? []).map((a) => a.iata), itinerary.destination.iata])
+      : routeLabel([itinerary.origin.iata, ...itinerary.layovers.map(([iata]) => iata), itinerary.destination.iata]);
 
   const dateLabel = isOneWay ? formatDate(itinerary.depart_date) : formatDateRange(itinerary.depart_date, itinerary.return_date);
   const lengthLabel = isOneWay
@@ -57,6 +60,11 @@ export function ResultCard({ itinerary, rank, tripType, selected, onSelect }: Re
           <p className="text-sm text-slate-500">
             {dateLabel} · {lengthLabel}
           </p>
+          {returnsElsewhere && (
+            <p className="mt-0.5 text-xs font-medium text-violet-600">
+              {t("results.returnsFrom", { city: localizedCityName(itinerary.return_origin!.iata, itinerary.return_origin!.city, locale) })}
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-lg font-bold text-slate-900">{formatMoney(itinerary.fare, itinerary.currency)}</p>

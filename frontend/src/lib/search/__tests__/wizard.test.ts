@@ -155,4 +155,44 @@ describe("buildSubmission", () => {
     if (result.ok) return;
     expect(result.error.key).toBe("wizard.errors.noOrigin");
   });
+
+  it("builds an open-jaw body from the SAME destination list used for round trip, tagged as its own trip type", () => {
+    const d = draft({
+      tripType: "open_jaw",
+      origin: TORONTO,
+      knowWhere: true,
+      destinationMode: "cities",
+      destinationCities: [
+        { airports: ["LIS"], label: "Lisbon (LIS)" },
+        { airports: ["BCN"], label: "Barcelona (BCN)" },
+      ],
+    });
+    const result = buildSubmission(d, { anywhereRegionCodes: [] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.submission.tripType).toBe("open_jaw");
+    const body = result.submission.body as import("@/lib/types").OpenJawSearchRequestBody;
+    expect(body.origin).toEqual(TORONTO);
+    expect(body.destination.selections.map((s) => (s as { label: string }).label)).toEqual(["Lisbon (LIS)", "Barcelona (BCN)"]);
+  });
+
+  it("expands a picked country into one destination selection per city, never one joined group", () => {
+    const japan = {
+      kind: "country" as const,
+      key: "JP",
+      code: "JP",
+      name: "Japan",
+      cities: [
+        { city: "Tokyo", airports: ["HND", "NRT"] },
+        { city: "Osaka", airports: ["KIX", "ITM"] },
+      ],
+    };
+    const d = draft({ origin: TORONTO, knowWhere: true, destinationMode: "cities", destinationCountries: [japan] });
+    const result = buildSubmission(d, { anywhereRegionCodes: [] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const body = result.submission.body as import("@/lib/types").SearchRequestBody;
+    expect(body.destination.selections).toHaveLength(2);
+    expect(body.destination.selections.every((s) => s.kind === "city")).toBe(true);
+  });
 });

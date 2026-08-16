@@ -110,6 +110,10 @@ export interface SearchSpace {
 
 export interface VerifiedItinerary {
   destination: DestinationGroup;
+  // Open-jaw only: the group flown OUT OF on the way home. Undefined for
+  // every other trip type (round trip/one-way always return to
+  // `destination`'s own airport; multi-city has no "home" concept at all).
+  returnOrigin?: DestinationGroup;
   departDate: string;
   returnDate: string;
   tripLength: number;
