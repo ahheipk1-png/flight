@@ -24,6 +24,11 @@ const REGION_NAMES: Record<string, Localized> = {
   netherlands: { en: "Netherlands", "zh-Hant": "荷蘭", "zh-Hans": "荷兰" },
   germany: { en: "Germany", "zh-Hant": "德國", "zh-Hans": "德国" },
   portugal: { en: "Portugal", "zh-Hant": "葡萄牙", "zh-Hans": "葡萄牙" },
+  southern_europe: {
+    en: "Southern Europe (Spain, Italy, Greece)",
+    "zh-Hant": "南歐（西班牙、義大利、希臘）",
+    "zh-Hans": "南欧（西班牙、意大利、希腊）",
+  },
 };
 
 // Keyed by IATA (the city an airport serves), covering §38's MVP geography.
@@ -52,6 +57,11 @@ const CITY_NAMES: Record<string, Localized> = {
   FRA: { en: "Frankfurt", "zh-Hant": "法蘭克福", "zh-Hans": "法兰克福" },
   LIS: { en: "Lisbon", "zh-Hant": "里斯本", "zh-Hans": "里斯本" },
   OPO: { en: "Porto", "zh-Hant": "波爾圖", "zh-Hans": "波尔图" },
+  MAD: { en: "Madrid", "zh-Hant": "馬德里", "zh-Hans": "马德里" },
+  BCN: { en: "Barcelona", "zh-Hant": "巴塞隆納", "zh-Hans": "巴塞罗那" },
+  FCO: { en: "Rome", "zh-Hant": "羅馬", "zh-Hans": "罗马" },
+  MXP: { en: "Milan", "zh-Hant": "米蘭", "zh-Hans": "米兰" },
+  ATH: { en: "Athens", "zh-Hant": "雅典", "zh-Hans": "雅典" },
 };
 
 export function localizedRegionName(code: string, fallbackName: string, locale: Locale): string {

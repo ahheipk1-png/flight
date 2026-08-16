@@ -13,5 +13,6 @@
   { "code": "france", "name": "France", "kind": "destination" },
   { "code": "netherlands", "name": "Netherlands", "kind": "destination" },
   { "code": "germany", "name": "Germany", "kind": "destination" },
-  { "code": "portugal", "name": "Portugal", "kind": "destination" }
+  { "code": "portugal", "name": "Portugal", "kind": "destination" },
+  { "code": "southern_europe", "name": "Southern Europe (Spain, Italy, Greece)", "kind": "destination" }
 ]
